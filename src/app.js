@@ -1,6 +1,7 @@
 import './style.css';
 import { computeNight, computeMonth, DEFAULTS } from './astronomy.js';
 import M from './planning.mjs';
+import { matchesSource } from './source-search.js';
 import { COLORS, renderTrajectory, renderNeighborSky, renderAllSky, separation } from './charts.js';
 
 const $ = id => document.getElementById(id);
@@ -54,7 +55,7 @@ function setRoute(route){
 }
 function filteredSources(){
   const q=S.filter.trim().toLowerCase();
-  let items=S.sources.filter(s=>(S.catalog==='all'||s.catalog===S.catalog)&&(S.status==='all'||S.status==='favorites'&&priority(s.id)>0||S.status==='published'&&s.defaultIncluded!==false)&&(!q||[s.name,s.type,...(s.aliases||[])].join(' ').toLowerCase().includes(q)));
+  let items=S.sources.filter(s=>(S.catalog==='all'||s.catalog===S.catalog)&&(S.status==='all'||S.status==='favorites'&&priority(s.id)>0||S.status==='published'&&s.defaultIncluded!==false)&&matchesSource(s,q));
   const annual=id=>S.annual?.monthly[id]||[];
   const flux=s=>s.catalog==='TeVCat'&&s.flux?.unit==='Crab'&&s.flux.value>0?s.flux.value:-Infinity;
   items.sort((a,b)=>{
@@ -154,7 +155,7 @@ function renderNightPicker(){
   const published=$('night-picker-status').value==='published',available=$('night-picker-available').checked;
   const rows=nightPicker.rows.filter(row=>{
     const s=source(row.id);
-    return (!available||row.minutes>0)&&(!published||s.defaultIncluded!==false)&&(catalog==='all'||s.catalog===catalog)&&(!q||[s.name,s.type,...(s.aliases||[])].join(' ').toLowerCase().includes(q));
+    return (!available||row.minutes>0)&&(!published||s.defaultIncluded!==false)&&(catalog==='all'||s.catalog===catalog)&&matchesSource(s,q);
   });
   $('night-picker-count').textContent=`${rows.length} 条匹配记录 · 可观测时长从长到短`;
   $('night-picker-list').innerHTML=rows.map(row=>{
@@ -335,7 +336,7 @@ function bindEvents(){
   for(const id of ['night-picker-catalog','night-picker-status','night-picker-available'])$(id).onchange=renderNightPicker;
   $('night-picker-dialog').onclose=()=>{nightPicker.worker?.terminate();nightPicker.worker=null;};
   $('night-picker-settings').onclick=()=>{$('night-picker-dialog').close();openSettings();};
-  $('night-search').oninput=event=>{const query=event.target.value.trim().toLowerCase();$('night-search-results').hidden=!query;if(!query)return;const found=S.sources.filter(s=>[s.name,...(s.aliases||[])].join(' ').toLowerCase().includes(query)).slice(0,8);$('night-search-results').innerHTML=found.map(s=>`<button data-search-source="${esc(s.id)}"><span>${esc(s.name)}</span><small>${s.catalog}</small></button>`).join('')||'<p>没有匹配的源</p>';};
+  $('night-search').oninput=event=>{const query=event.target.value.trim();$('night-search-results').hidden=!query;if(!query)return;const found=S.sources.filter(s=>matchesSource(s,query)).slice(0,8);$('night-search-results').innerHTML=found.map(s=>`<button data-search-source="${esc(s.id)}"><span>${esc(s.name)}</span><small>${s.catalog}</small></button>`).join('')||'<p>没有匹配的源</p>';};
   document.addEventListener('pointerdown',event=>{if(!event.target.closest('.source-picker-label'))$('night-search-results').hidden=true;});
   $('cursor').oninput=event=>{S.cursor=+event.target.value;drawNightCharts();};
   $('trajectory').onpointerdown=event=>{const rect=event.currentTarget.getBoundingClientRect(),left=Number(event.currentTarget.dataset.plotLeft)||65,right=Number(event.currentTarget.dataset.plotRight)||20;S.cursor=Math.max(0,Math.min(840,Math.round((event.clientX-rect.left-left)/(rect.width-left-right)*840)));drawNightCharts();};
