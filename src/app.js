@@ -21,6 +21,7 @@ try { config = {...PRESET,...M.validateConfig(saved.config || PRESET),defaultDur
 config.defaultDuration = Math.max(5,Math.min(600,config.defaultDuration));
 const S = {config, sources:[], meta:{}, byId:new Map(), route:'overview', year:Number(today(config).slice(0,4)), month:Number(today(config).slice(5,7))-1, page:0, perPage:25, filter:'',catalog:'all',status:'published',sort:'month',view:'table', annual:null, worker:null, computeId:0, date:today(config), focus:'',visible:[],cursor:180,night:null,nightKey:'',blocks:[],selected:null,nextId:1,revision:1,history:[],priorities:saved.priorities && typeof saved.priorities==='object' ? saved.priorities : {},monthSource:'',monthYear:2026,monthIndex:0,monthSelected:'',monthData:null};
 let toastTimer, drag = null, assessment = null, renderFrame;
+const nightPicker = {key:'',rows:null,worker:null,error:''};
 const source = id => S.byId.get(id);
 const nightConfig = () => ({...S.config,mode:'LACT',startHour:18});
 const color = id => S.visible.includes(id) ? COLORS[S.visible.indexOf(id) % COLORS.length] : '#8793a7';
@@ -109,6 +110,60 @@ function chooseFocus(id,{overlay=false,open=false}={}){
   if(!overlay)S.focus=id;
   if(open)setRoute('night');else if(S.route==='night')renderNight();
   savePlan();
+}
+function removeCurve(id){
+  if(!S.visible.includes(id)||S.visible.length<=1)return;
+  S.visible=S.visible.filter(value=>value!==id);
+  if(S.focus===id)S.focus=S.visible[0];
+  renderNight();savePlan();
+}
+function openNightPicker(){
+  const dialog=$('night-picker-dialog'),c=nightConfig(),key=S.date+JSON.stringify(c);
+  $('night-search-results').hidden=true;
+  $('night-picker-context').textContent=`${S.date} · 18:00 至次日 08:00 · ${timezoneLabel(c)}`;
+  $('night-picker-conditions').textContent=conditions(c);
+  if(nightPicker.key!==key){nightPicker.worker?.terminate();Object.assign(nightPicker,{key,rows:null,worker:null,error:''});}
+  if(!dialog.open)dialog.showModal();
+  renderNightPicker();
+  if(nightPicker.rows||nightPicker.worker)return;
+  nightPicker.error='';renderNightPicker();
+  const worker=nightPicker.worker=new Worker(new URL('./visibility-worker.js',import.meta.url),{type:'module'});
+  const finish=(rows,error='')=>{
+    if(nightPicker.worker!==worker)return;
+    Object.assign(nightPicker,{rows,error,worker:null});worker.terminate();renderNightPicker();
+  };
+  worker.onmessage=({data})=>{
+    if(data.type==='result')finish(data.result);
+    if(data.type==='error')finish(null,data.error);
+  };
+  worker.onerror=()=>finish(null,'当晚源表计算未完成，请重试。');
+  worker.postMessage({type:'night-catalog',date:S.date,sources:S.sources.map(({id,name,ra,dec})=>({id,name,ra,dec})),config:c});
+}
+function renderNightPicker(){
+  if(!$('night-picker-dialog').open)return;
+  const c=nightConfig(),activeId=document.activeElement?.dataset.pickerSource;
+  $('night-picker-selected').innerHTML=S.visible.map(id=>`<button class="picker-chip" data-picker-source="${esc(id)}" style="--source-color:${color(id)}" aria-label="从对比中移除 ${esc(source(id).name)}" ${S.visible.length===1?'disabled':''}><i class="legend-dot"></i>${esc(source(id).name)}<span aria-hidden="true">×</span></button>`).join('');
+  $('night-picker-selection').textContent=`已叠加 ${S.visible.length} / 6${S.visible.length===6?' · 移除一个源后可继续添加':' · 点击叠加，多源对比'}`;
+  $('night-picker-list').setAttribute('aria-busy',String(!nightPicker.rows&&!nightPicker.error));
+  if(!nightPicker.rows){
+    $('night-picker-count').textContent=nightPicker.error?'计算未完成':'正在计算当晚可观测源…';
+    $('night-picker-list').innerHTML=nightPicker.error?`<div class="empty-state">${esc(nightPicker.error)}<br><button class="text-button" data-action="retry-night-picker">重新计算</button></div>`:'<div class="empty-state">正在按当前观测条件计算全部目录源…</div>';
+    return;
+  }
+  const q=$('night-picker-search').value.trim().toLowerCase(),catalog=$('night-picker-catalog').value;
+  const published=$('night-picker-status').value==='published',available=$('night-picker-available').checked;
+  const rows=nightPicker.rows.filter(row=>{
+    const s=source(row.id);
+    return (!available||row.minutes>0)&&(!published||s.defaultIncluded!==false)&&(catalog==='all'||s.catalog===catalog)&&(!q||[s.name,s.type,...(s.aliases||[])].join(' ').toLowerCase().includes(q));
+  });
+  $('night-picker-count').textContent=`${rows.length} 条匹配记录 · 可观测时长从长到短`;
+  $('night-picker-list').innerHTML=rows.map(row=>{
+    const s=source(row.id),selected=S.visible.includes(s.id),disabled=selected?S.visible.length===1:S.visible.length>=6;
+    const windows=row.windows.map(([a,b])=>`${M.clock(a,c)}–${M.clock(b,c)}`).join(' / ');
+    const extra=['candidate','disputed'].includes(s.status)?' · '+statusNames[s.status]:'';
+    return `<div class="night-picker-row ${selected?'is-selected':''}" role="listitem" data-picker-row="${esc(s.id)}"><div class="picker-source"><strong>${esc(s.name)}</strong><small>${esc(s.catalog)} · ${esc(s.type||'未分类')}${extra}</small></div><div class="picker-window"><div class="picker-window-track" aria-hidden="true">${row.windows.map(([a,b])=>`<i style="left:${a/840*100}%;width:${(b-a)/840*100}%"></i>`).join('')}</div><small>${windows||'当前条件下无可用时段'}</small></div><div class="picker-hours">${hours(row.minutes)}<small>${row.minutes} min</small></div><button class="${selected?'quiet-button':'secondary-button'}" data-picker-source="${esc(s.id)}" aria-pressed="${selected}" aria-label="${selected?'移除':'叠加'} ${esc(s.name)}" ${disabled?'disabled':''}>${selected?'已叠加 −':'＋ 叠加'}</button></div>`;
+  }).join('')||'<div class="empty-state">没有符合筛选的源。<br>可取消“仅可观测”，或调整目录、关键词与观测条件。</div>';
+  if(activeId)[...$('night-picker-list').querySelectorAll('[data-picker-source]')].find(b=>b.dataset.pickerSource===activeId)?.focus({preventScroll:true});
 }
 function loadDate(date){
   if(!M.validDate(date)||Number(date.slice(0,4))<2000||Number(date.slice(0,4))>2100){toast('请选择 2000–2100 年之间的有效日期。');$('night-date').value=S.date;return;}
@@ -244,7 +299,9 @@ function bindEvents(){
     if(b.dataset.cellSource){S.month=+b.dataset.cellMonth;openMonth(b.dataset.cellSource);renderOverview();return;}
     if(b.dataset.focus){chooseFocus(b.dataset.focus);return;}
     if(b.dataset.overlay){chooseFocus(b.dataset.overlay,{overlay:true});return;}
-    if(b.dataset.removeCurve){S.visible=S.visible.filter(id=>id!==b.dataset.removeCurve);if(S.focus===b.dataset.removeCurve)S.focus=S.visible[0];renderNight();savePlan();return;}
+    if(b.dataset.removeCurve){removeCurve(b.dataset.removeCurve);return;}
+    if(b.dataset.pickerSource){const id=b.dataset.pickerSource;if(S.visible.includes(id))removeCurve(id);else chooseFocus(id,{overlay:true});renderNightPicker();return;}
+    if(b.dataset.action==='retry-night-picker'){openNightPicker();return;}
     if(b.dataset.add){addTask(b.dataset.add);return;}
     if(b.dataset.selectTask){S.selected=+b.dataset.selectTask;const task=S.blocks.find(x=>x.id===S.selected);if(task)chooseFocus(task.source);return;}
     if(b.dataset.monthDay){S.monthSelected=b.dataset.monthDay;$('month-days').querySelectorAll('button').forEach(el=>el.classList.toggle('selected',el.dataset.monthDay===S.monthSelected));return;}
@@ -273,6 +330,11 @@ function bindEvents(){
   $('month-next').onclick=()=>{const d=new Date(Date.UTC(S.monthYear,S.monthIndex+1,1));openMonth(S.monthSource,d.getUTCFullYear(),d.getUTCMonth());};
   $('month-open-night').onclick=()=>{$('month-dialog').close();loadDate(S.monthSelected);chooseFocus(S.monthSource);setRoute('night');window.scrollTo({top:0,behavior:'instant'});};
   $('add-focused').onclick=()=>addTask(S.focus);
+  $('night-picker-button').onclick=openNightPicker;
+  $('night-picker-search').oninput=renderNightPicker;
+  for(const id of ['night-picker-catalog','night-picker-status','night-picker-available'])$(id).onchange=renderNightPicker;
+  $('night-picker-dialog').onclose=()=>{nightPicker.worker?.terminate();nightPicker.worker=null;};
+  $('night-picker-settings').onclick=()=>{$('night-picker-dialog').close();openSettings();};
   $('night-search').oninput=event=>{const query=event.target.value.trim().toLowerCase();$('night-search-results').hidden=!query;if(!query)return;const found=S.sources.filter(s=>[s.name,...(s.aliases||[])].join(' ').toLowerCase().includes(query)).slice(0,8);$('night-search-results').innerHTML=found.map(s=>`<button data-search-source="${esc(s.id)}"><span>${esc(s.name)}</span><small>${s.catalog}</small></button>`).join('')||'<p>没有匹配的源</p>';};
   document.addEventListener('pointerdown',event=>{if(!event.target.closest('.source-picker-label'))$('night-search-results').hidden=true;});
   $('cursor').oninput=event=>{S.cursor=+event.target.value;drawNightCharts();};
