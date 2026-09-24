@@ -3,6 +3,12 @@ const DATABASE='lact.private-catalog.v1';
 export const PRIVATE_PLAN_PREFIX='lact.private.plans.';
 export const PRIVATE_PRIORITY_PREFIX='lact.private.priorities.';
 
+export function checkPlanCatalogIdentity(payload,fingerprint=''){
+  const ids=[payload?.focus,...(Array.isArray(payload?.visible)?payload.visible:[]),...(Array.isArray(payload?.blocks)?payload.blocks.map(b=>b?.source):[])];
+  const hasPrivate=ids.some(id=>typeof id==='string'&&id.startsWith('private:'));
+  if((hasPrivate||payload?.catalogIdentity?.private)&&(!payload?.catalogIdentity?.private||!fingerprint||payload.catalogIdentity.fingerprint!==fingerprint))throw new Error('请先导入这份计划对应的私有源表；私有计划必须带有匹配的目录指纹');
+}
+
 export async function catalogFingerprint(text){
   const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
   return Array.from(new Uint8Array(hash),b=>b.toString(16).padStart(2,'0')).join('');

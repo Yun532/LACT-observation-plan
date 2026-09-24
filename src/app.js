@@ -6,7 +6,7 @@ import { COLORS, renderTrajectory, renderAllSky, separation } from './charts.js'
 import { renderSiteSky } from './sky-chart.js';
 import { renderNeighborField, neighborEntries, neighborhoodRadius, extensionText } from './neighbor-chart.js';
 import { parsePrivateCatalog, PRIVATE_CATALOG_LIMITS } from './private-catalog.js';
-import { catalogFingerprint, localCatalog, combineCatalogs, PRIVATE_PLAN_PREFIX, PRIVATE_PRIORITY_PREFIX } from './local-catalog-store.js';
+import { catalogFingerprint, localCatalog, combineCatalogs, checkPlanCatalogIdentity, PRIVATE_PLAN_PREFIX, PRIVATE_PRIORITY_PREFIX } from './local-catalog-store.js';
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -48,7 +48,7 @@ function snapshot(){return {version:1,date:S.date,catalogIdentity:privateCatalog
 function savePlan(){if(!S.sources.length||(privateCatalog&&privateEpoch!==clearEpoch()))return;plans[S.date]={...snapshot(),revision:S.revision};safeStore(privateCatalog?PRIVATE_PLAN_PREFIX+privateFingerprint:PLAN_KEY,plans);}
 function restoreCatalogPlan(payload){
   if(typeof payload==='string'){if(payload.length>2_000_000)throw new Error('计划文件过大');payload=JSON.parse(payload);}
-  if(payload?.catalogIdentity?.private&&(!privateCatalog||payload.catalogIdentity.fingerprint!==privateFingerprint))throw new Error('请先导入这份计划对应的私有源表');
+  checkPlanCatalogIdentity(payload,privateCatalog?privateFingerprint:'');
   return M.restorePlan(payload,S.sources);
 }
 function remember(){S.history.push(JSON.stringify({blocks:S.blocks,selected:S.selected,visible:S.visible,focus:S.focus}));if(S.history.length>40)S.history.shift();}
@@ -71,6 +71,7 @@ function renderCatalogState(){
   $('private-export-note').hidden=!active;
 }
 function activateCatalog(catalog,fingerprint='',remembered=false,{initial=false,discard=false}={}){
+  if(!initial){clearTimeout(toastTimer);$('toast').textContent='';$('toast').hidden=true;}
   if(!initial&&!discard){savePlan();savePreferences();}
   S.worker?.terminate();nightPicker.worker?.terminate();S.computeId++;cancelAnimationFrame(renderFrame);
   privateCatalog=catalog;privateFingerprint=fingerprint;catalogRemembered=remembered;privateEpoch=clearEpoch();
@@ -87,7 +88,7 @@ function activateCatalog(catalog,fingerprint='',remembered=false,{initial=false,
   $('night-search-results').hidden=true;$('night-search-results').innerHTML='';$('night-search').value='';$('source-search').value='';$('night-picker-search').value='';
   $('source-details').innerHTML='';$('month-days').innerHTML='';$('review-content').innerHTML='';$('about-content').innerHTML='';$('sky-hover').textContent='悬停查看源名、V 星等和位置；点击源切换关注。';
   for(const id of ['source-title','month-title','month-coordinates','month-caption','night-picker-list','night-picker-selected','all-sky'])$(id).replaceChildren();
-  $('review-confirm').checked=false;document.querySelectorAll('[data-export]').forEach(b=>b.disabled=true);clearTimeout(toastTimer);$('toast').textContent='';$('toast').hidden=true;
+  $('review-confirm').checked=false;document.querySelectorAll('[data-export]').forEach(b=>b.disabled=true);
   renderCatalogState();renderConditions();
   if(!initial){const route=S.route;S.route='night';renderNight();S.route=route;setRoute(route);calculateAnnual();}
 }

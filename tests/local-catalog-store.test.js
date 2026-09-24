@@ -7,7 +7,18 @@ test('FK5 coordinates retain their frame and are not mislabeled ICRS in exports'
   assert.equal(row.coordinate_frame,'FK5/J2000');assert.equal(row.ra_catalog_deg,17.25);assert.equal(row.ra_icrs_deg,null);
   assert.equal(coordinateColumns({ra:1,dec:2}).ra_icrs_deg,1);
 });
-import { catalogFingerprint, combineCatalogs } from '../src/local-catalog-store.js';
+import { catalogFingerprint, combineCatalogs, checkPlanCatalogIdentity } from '../src/local-catalog-store.js';
+
+test('private plans require the matching catalog even when a fingerprint field was removed',()=>{
+  const plan={focus:'private:synthetic',blocks:[],visible:[]};
+  assert.throws(()=>checkPlanCatalogIdentity(plan,'test-version'));
+  plan.catalogIdentity={private:true,fingerprint:'old-version'};
+  assert.throws(()=>checkPlanCatalogIdentity(plan,'test-version'));
+  plan.catalogIdentity.fingerprint='test-version';
+  assert.doesNotThrow(()=>checkPlanCatalogIdentity(plan,'test-version'));
+  assert.throws(()=>checkPlanCatalogIdentity(plan));
+  assert.doesNotThrow(()=>checkPlanCatalogIdentity({focus:'public-test'}));
+});
 
 // Entirely synthetic fixtures: no non-public catalog records or statistics.
 test('a local catalog replaces first-edition LHAASO while retaining TeVCat and both inputs', () => {
