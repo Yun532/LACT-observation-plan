@@ -1,5 +1,11 @@
 @layer base, layout, components, responsive;
 @layer components {
+  .sky-object-legend{display:flex;align-items:center;flex-wrap:wrap;gap:7px 15px;margin:11px 0 5px;font-size:11px;color:#69788e;line-height:1.6}
+  .sky-object-legend>span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  .sky-object-legend .star-symbol{width:15px;height:15px;fill:#b8791b;flex:none}
+  .sky-object-legend .tev-symbol{display:block;width:8px;height:8px;border:1.5px solid #6a84a4;border-radius:50%;background:white;margin:0 3px;flex:none}
+  .sky-object-legend .selected-symbol,.sky-object-legend .focus-symbol{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border:1.5px solid var(--blue);border-radius:50%;background:white;color:var(--blue);font-style:normal;font-size:9px;font-weight:600;flex:none}
+  .sky-object-legend .focus-symbol:after{content:'';width:4px;height:4px;border-radius:50%;background:var(--blue)}
   .solar-events{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:20px;padding:15px 18px;background:#f7f9fc;border-radius:8px}
   .solar-event{border-left:2px solid #cad6f1;padding-left:12px}
   .solar-event.solar{border-color:#dfc39a}

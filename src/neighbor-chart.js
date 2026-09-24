@@ -51,8 +51,9 @@ export function renderNeighborField(svg,focus,neighbors,stars,c,{showStars=true,
   html+=`<circle cx="${cx}" cy="${cy}" r="${Math.tan(c.fov*D)*scale}" fill="#edf2ff" fill-opacity=".55" stroke="${COLORS[0]}" stroke-opacity=".55" stroke-dasharray="6 4"><title>设置的视场半径 ${c.fov}°</title></circle>`;
   const nearbyStars=showStars?stars.map(s=>({...s,...positions?.get(s.id)})).filter(s=>separation(focus,s)<=radius).sort((a,b)=>b.mag-a.mag):[];
   for(const s of nearbyStars){
-    const p=project(s);if(!p)continue;const [x,y]=p,k=Math.max(1.3,3.7-s.mag*.3),dim=s.alt<0;
-    html+=`<path d="M${x-k} ${y}H${x+k}M${x} ${y-k}V${y+k}" stroke="#a17c37" stroke-width="1.1" opacity="${dim ? .3 : .8}"><title>${esc(s.name)} · V=${s.mag.toFixed(2)}${dim?' · 此刻地平线下':''}</title></path>`;
+    const p=project(s);if(!p)continue;const [x,y]=p,k=Math.max(1.5,Math.min(6,5.5-s.mag*.5)),q=k*.25,dim=s.alt<0;
+    const opacity=Math.max(.38,Math.min(.95,.38+(8-s.mag)*.085))*(dim ? .3 : 1);
+    html+=`<path d="M${x} ${y-k}L${x+q} ${y-q}L${x+k} ${y}L${x+q} ${y+q}L${x} ${y+k}L${x-q} ${y+q}L${x-k} ${y}L${x-q} ${y-q}Z" fill="#b8791b" opacity="${opacity}"><title>${esc(s.name)} · V=${s.mag.toFixed(2)}${dim?' · 此刻地平线下':''}</title></path>`;
   }
   const list=[focus,...neighbors];
   if(showExtensions)for(const s of list){
@@ -73,7 +74,9 @@ export function renderNeighborField(svg,focus,neighbors,stars,c,{showStars=true,
   list.forEach((s,i)=>{
     const p=project(s);if(!p)return;const [x,y]=p,col=s.plotColor||'#8793a7',outside=s.separation>radius;
     if(outside)return;
-    html+=`<circle cx="${x}" cy="${y}" r="${i?3:5}" fill="${col}" stroke="#fff" stroke-width="1.1" data-neighbor-source="${esc(s.id)}"><title>${esc(s.name+' · '+extensionText(s))}</title></circle>`;
+    const highlighted=i===0||COLORS.includes(col);
+    html+=`<circle cx="${x}" cy="${y}" r="${i?(highlighted?4:3.2):5}" fill="#fff" stroke="${col}" stroke-width="${highlighted?1.6:1.3}" data-neighbor-source="${esc(s.id)}"><title>${esc(s.name+' · '+extensionText(s))}</title></circle>`;
+    if(highlighted)html+=`<circle cx="${x}" cy="${y}" r="${i?1.2:1.6}" fill="${col}" pointer-events="none"/>`;
     // Every source is plotted. Only number the nearest entries to limit crowding.
     if(i<=8){const a=i*Math.PI/3;html+=`<text x="${x+Math.cos(a)*13}" y="${y+Math.sin(a)*13+3}" text-anchor="middle" style="fill:${col};font-size:10px">${i||'◎'}</text>`;}
   });

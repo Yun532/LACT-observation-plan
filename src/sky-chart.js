@@ -169,11 +169,11 @@ export function renderSiteSky(canvas, {
 
   const brightLabels = [];
   if (showStars) {
-    // Batch the many faint crosses by magnitude; no label or DOM element per star.
+    // Filled four-point stars stay distinct from circular TeV source markers.
     const bins = new Map();
     for (const star of stars) {
       const p = byPosition.get(star.id); if (!validPosition(p) || p.alt < 0 || !finite(star.mag)) continue;
-      const xy = point(p), size = clamp(.5 + (8 - star.mag) * .25, .5, 3.5), bin = Math.round(star.mag * 4) / 4;
+      const xy = point(p), size = clamp(1.2 + (8 - star.mag) * .56, 1.2, 6), bin = Math.round(star.mag * 4) / 4;
       if (!bins.has(bin)) bins.set(bin, []);
       bins.get(bin).push(xy);
       out.hits.push({ ...xy, r: Math.max(size + 2, 3), kind: 'star', id: star.id, name: star.name || star.id, mag: star.mag, alt: p.alt, az: p.az, ra: p.ra ?? star.ra, dec: p.dec ?? star.dec });
@@ -181,13 +181,15 @@ export function renderSiteSky(canvas, {
       if (star.name && star.mag <= 1.6) brightLabels.push({ ...star, ...xy });
     }
     for (const [mag, points] of [...bins].sort((a, b) => b[0] - a[0])) {
-      const size = clamp(.5 + (8 - mag) * .25, .5, 3.5);
+      const size = clamp(1.2 + (8 - mag) * .56, 1.2, 6), inner = size * .25;
       ctx.beginPath();
-      for (const p of points) { ctx.moveTo(p.x - size, p.y); ctx.lineTo(p.x + size, p.y); ctx.moveTo(p.x, p.y - size); ctx.lineTo(p.x, p.y + size); }
+      for (const p of points) {
+        ctx.moveTo(p.x, p.y-size);ctx.lineTo(p.x+inner,p.y-inner);ctx.lineTo(p.x+size,p.y);ctx.lineTo(p.x+inner,p.y+inner);
+        ctx.lineTo(p.x,p.y+size);ctx.lineTo(p.x-inner,p.y+inner);ctx.lineTo(p.x-size,p.y);ctx.lineTo(p.x-inner,p.y-inner);ctx.closePath();
+      }
       // Preserve every catalog star while keeping the numerous faint stars below the planning overlays.
-      const alpha = clamp(.10 * 1.4 ** (8 - mag), .08, .85);
-      ctx.strokeStyle = `rgba(134, 125, 103, ${alpha.toFixed(3)})`;
-      ctx.lineWidth = clamp(.5 + (8 - mag) * .05, .5, 1); ctx.stroke();
+      const alpha = clamp(.035 * 1.85 ** (8 - mag), .035, .95);
+      ctx.fillStyle = `rgba(184, 121, 27, ${alpha.toFixed(3)})`;ctx.fill();
     }
   }
 
@@ -220,7 +222,7 @@ export function renderSiteSky(canvas, {
     const hit = { ...xy, r: active ? 8 : 4, kind: 'source', id: source.id, name: source.name, alt: p.alt, az: p.az, ra: p.ra ?? source.ra, dec: p.dec ?? source.dec, extension: ext, selected: active };
     out.hits.push(hit);
     if (active) { selected.push({ source, p, xy }); out.selectedAbove++; }
-    else disk(xy.x, xy.y, 1.7, '#9ca8bd99');
+    else disk(xy.x, xy.y, 2.4, '#ffffff', '#6a84a4cc', 1.1);
   }
   ctx.restore();
 
@@ -249,7 +251,7 @@ export function renderSiteSky(canvas, {
     if (reason) { ctx.setLineDash([2, 2]); disk(xy.x, xy.y, 10, null, ink); ctx.setLineDash([]); }
     collisionLabel(source.name, xy, ink, source.id === focus);
   }
-  for (const star of brightLabels.sort((a, b) => a.mag - b.mag).slice(0, 10)) collisionLabel(star.name, star, '#748098');
+  for (const star of brightLabels.sort((a, b) => a.mag - b.mag).slice(0, 10)) collisionLabel('✦ '+star.name, star, '#98621b');
 
   const body = (name, kind, p, ink, fill) => {
     if (!validPosition(p) || p.alt < 0) return;
