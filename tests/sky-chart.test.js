@@ -42,4 +42,27 @@ assert.match(extensionLabel(hit), /r39 < 0.3°.*95%/);
 assert.equal(result.hits.some(h => h.id === 'hidden'), false);
 assert.ok(strokes < 500, 'Faint star crosses must be batched, not stroked one object at a time');
 console.log(`47,000-star mock rendering and hit metadata passed (${(performance.now() - started).toFixed(0)} ms)`);
+
+// Synthetic two-component Gaussian: the primary must not be drawn twice and
+// the second centre uses its own precomputed horizon coordinates.
+const sigma=value=>({kind:'gaussian-sigma',sigmaDeg:value});
+const two={id:'synthetic',name:'Synthetic Gaussian',ra:100,dec:20,extension:sigma(.5),components:[
+  {id:'first',ra:100,dec:20,extension:sigma(.5)},
+  {id:'second',ra:103,dec:22,extension:sigma(1)},
+]};
+let sigmaLabels=0;
+context.fillText=text=>{if(text==='σ')sigmaLabels++;};
+const twoPositions={sources:[{id:'synthetic',alt:50,az:90},{id:'synthetic::first',alt:50,az:90},{id:'synthetic::second',alt:54,az:97}]};
+const twoResult=renderSiteSky(canvas,{positions:twoPositions,sources:[two],visible:['synthetic'],focus:'synthetic',showStars:false});
+assert.equal(sigmaLabels,2,'The primary and secondary each have one labeled sigma contour');
+assert.equal(twoResult.hits.length,2,'One parent centre and one distinct component centre');
+const secondHit=twoResult.hits.find(h=>h.componentId==='synthetic::second');
+assert.equal(secondHit.id,'synthetic','Clicking a component keeps the catalog source as the selected task target');
+assert.equal(secondHit.alt,54);assert.equal(secondHit.az,97);
+assert.equal(secondHit.extension.sigmaDeg,1);
+assert.match(extensionLabel(secondHit),/σ 1°.*参考圈/);
+assert.doesNotMatch(extensionLabel(secondHit),/r39|位置误差/);
+const hiddenExtensions=renderSiteSky(canvas,{positions:twoPositions,sources:[two],showExtensions:false,showStars:false});
+assert.equal(hiddenExtensions.hits.length,1);
+assert.match(extensionLabel({extension:{kind:'catalog-undefined'}}),/定义见源表/);
 console.log('Instantaneous sky projection checks passed');

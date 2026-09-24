@@ -1,5 +1,6 @@
 import M from './planning.mjs';
 import { COLORS } from './charts.js';
+import { knownRadius, gaussianComponents } from './neighbor-chart.js';
 
 const DEG = Math.PI / 180;
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -64,10 +65,12 @@ export function extensionLabel(source) {
     const confidence = finite(ext.confidence) ? `${Math.round(ext.confidence * 100)}% ` : '';
     return `高斯 r39 ${ext.upperLimit ? '< ' : ''}${ext.radiusDeg}°${ext.upperLimit ? `（${confidence}上限）` : ''}`;
   }
+  if (ext?.kind === 'gaussian-sigma' && finite(ext.sigmaDeg)) return `二维高斯 σ ${ext.upperLimit ? '≤ ' : ''}${ext.sigmaDeg}°${ext.upperLimit ? '（上限）' : ''} · σ参考圈`;
   if (ext?.kind === 'catalog-angular-size') {
     const sizes = [ext.xDeg, ext.yDeg].filter(finite);
     if (sizes.length) return `目录角尺度 ${sizes.join('° × ')}°（定义依原文，不作半径）`;
   }
+  if (ext?.kind === 'catalog-undefined') return '原模型尺度（定义见源表）';
   return '未提供明确展宽';
 }
 
@@ -188,12 +191,29 @@ export function renderSiteSky(canvas, {
     }
   }
 
+  const drawExtension=(p,extension,ink,active)=>{
+    const r=knownRadius({extension});
+    if(!validPosition(p)||!(r>0)||p.alt+r<0)return;
+    smallCircle(p,r,ink,extension.upperLimit?[2,2]:[],active ? .9 : .62);
+    if(extension.kind==='gaussian-sigma'){
+      const anchor=horizontalCircle(p.alt,p.az,r,16).find(q=>q.alt>=0);
+      if(anchor){const xy=point(anchor);label('σ',xy.x+3,xy.y-4,ink);}
+    }
+  };
   const selected = [];
   for (const source of sources) {
     const p = byPosition.get(source.id); if (!validPosition(p)) continue;
     const active = visible.includes(source.id), xy = point(p), ext = source.extension;
-    if (showExtensions && ext?.kind === 'gaussian-r39' && finite(ext.radiusDeg) && ext.radiusDeg > 0 && p.alt + ext.radiusDeg >= 0) {
-      smallCircle(p, ext.radiusDeg, active ? color(source.id) : '#9ca8bd', ext.upperLimit ? [2, 2] : [], active ? .9 : .62);
+    if (showExtensions) {
+      const ink=active?color(source.id):'#9ca8bd';
+      drawExtension(p,ext,ink,active);
+      for(const component of gaussianComponents(source)){
+        const cp=byPosition.get(component.id);if(!validPosition(cp))continue;
+        drawExtension(cp,component.extension,ink,active);
+        if(cp.alt<0)continue;
+        const cxy=point(cp);disk(cxy.x,cxy.y,3,'#fff',ink,1.3);
+        out.hits.push({...cxy,r:5,kind:'source',id:source.id,componentId:component.id,name:component.name,alt:cp.alt,az:cp.az,ra:cp.ra??component.ra,dec:cp.dec??component.dec,extension:component.extension,selected:active});
+      }
     }
     if (p.alt < 0) continue;
     out.sourceCount++;

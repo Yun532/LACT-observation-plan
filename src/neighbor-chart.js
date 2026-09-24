@@ -2,15 +2,32 @@ import { COLORS, separation } from './charts.js';
 
 const D=Math.PI/180,esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const neighborhoodRadius=c=>Math.max(5,c.fov)+(c.skyPadding??3);
-export const knownRadius=s=>s.extension?.kind==='gaussian-r39'&&Number.isFinite(s.extension.radiusDeg)?s.extension.radiusDeg:0;
+export function knownRadius(s){
+  const e=s.extension,value=e?.kind==='gaussian-r39'?e.radiusDeg:e?.kind==='gaussian-sigma'?e.sigmaDeg:0;
+  return Number.isFinite(value)&&value>=0?value:0;
+}
+// A sigma circle is a morphology reference contour, not a hard source boundary.
+// Public WCDA/KM2A component records without this declared shape are unchanged.
+export function gaussianComponents(s){
+  const accepted=[];
+  for(const component of Array.isArray(s.components)?s.components:[]){
+    if(component.extension?.kind!=='gaussian-sigma'||!Number.isFinite(component.extension.sigmaDeg)||component.extension.sigmaDeg<0||!Number.isFinite(component.ra)||!Number.isFinite(component.dec))continue;
+    const duplicate=[s,...accepted].some(other=>other.extension?.kind==='gaussian-sigma'&&Math.abs(other.extension.sigmaDeg-component.extension.sigmaDeg)<1e-10&&Math.abs(((other.ra-component.ra+540)%360)-180)<1e-8&&Math.abs(other.dec-component.dec)<1e-8);
+    if(duplicate)continue;
+    accepted.push({...component,id:`${s.id}::${component.id}`,parentId:s.id,name:`${s.name} · ${component.name||component.id}`});
+  }
+  return accepted;
+}
 export function neighborEntries(focus,sources,radius){
   return sources.filter(s=>s.id!==focus.id).map(s=>({...s,separation:separation(focus,s)}))
-    .filter(s=>s.separation<=radius+knownRadius(s)).sort((a,b)=>a.separation-b.separation||a.name.localeCompare(b.name));
+    .filter(s=>s.separation<=radius+knownRadius(s)||gaussianComponents(s).some(component=>separation(focus,component)<=radius+knownRadius(component))).sort((a,b)=>a.separation-b.separation||a.name.localeCompare(b.name));
 }
 export function extensionText(s){
   const e=s.extension;
   if(e?.kind==='gaussian-r39')return `r39 ${e.upperLimit?'≤ ':''}${e.radiusDeg}°${e.upperLimit?'（95% 上限）':''}`;
+  if(e?.kind==='gaussian-sigma'&&Number.isFinite(e.sigmaDeg))return `二维高斯 σ ${e.upperLimit?'≤ ':''}${e.sigmaDeg}°${e.upperLimit?'（上限）':''} · σ参考圈`;
   if(e?.kind==='catalog-angular-size')return `目录角尺度 ${[e.xDeg,e.yDeg].filter(Number.isFinite).join(' × ')}°（定义未统一）`;
+  if(e?.kind==='catalog-undefined')return '原模型尺度（定义见源表）';
   return '未提供展宽';
 }
 function circle(s,radius){
@@ -39,9 +56,19 @@ export function renderNeighborField(svg,focus,neighbors,stars,c,{showStars=true,
   }
   const list=[focus,...neighbors];
   if(showExtensions)for(const s of list){
-    const er=knownRadius(s);if(!(er>0))continue;
-    const col=s.plotColor||'#8793a7',upper=s.extension.upperLimit;
-    html+=`<path d="${path(circle(s,er))}" fill="${upper?'none':col}" fill-opacity=".07" stroke="${col}" stroke-opacity=".65" stroke-width="1" ${upper?'stroke-dasharray="4 3"':''}><title>${esc(s.name+' · '+extensionText(s))}</title></path>`;
+    const components=gaussianComponents(s),col=s.plotColor||'#8793a7';
+    for(const part of [s,...components]){
+      const er=knownRadius(part);if(!(er>0))continue;
+      const upper=part.extension.upperLimit,points=circle(part,er),sigma=part.extension.kind==='gaussian-sigma';
+      html+=`<path data-morphology="${sigma?'sigma':'r39'}" d="${path(points)}" fill="${upper?'none':col}" fill-opacity=".07" stroke="${col}" stroke-opacity=".65" stroke-width="1" ${upper?'stroke-dasharray="4 3"':''}><title>${esc(part.name+' · '+extensionText(part))}</title></path>`;
+      const anchor=project(points[0]);
+      if(sigma&&anchor)html+=`<text x="${anchor[0]+3}" y="${anchor[1]-3}" style="fill:${col};font-size:10px">σ</text>`;
+    }
+    for(const component of components){
+      if(separation(focus,component)>radius)continue;
+      const p=project(component);if(!p)continue;const [x,y]=p;
+      html+=`<circle cx="${x}" cy="${y}" r="3" fill="#fff" stroke="${col}" stroke-width="1.3" data-neighbor-source="${esc(s.id)}" data-component="${esc(component.id)}"><title>${esc(component.name+' · '+extensionText(component))}</title></circle>`;
+    }
   }
   list.forEach((s,i)=>{
     const p=project(s);if(!p)return;const [x,y]=p,col=s.plotColor||'#8793a7',outside=s.separation>radius;

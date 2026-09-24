@@ -202,6 +202,12 @@ export function azimuth(a, t) {
 }
 
 /** Export only a valid complete plan. END_EXCLUSIVE denotes the unobserved boundary. */
+export function coordinateColumns(src){
+  const frame=src.coordinateFrame||'ICRS',ra=Number(src.ra.toFixed(6)),dec=Number(src.dec.toFixed(6));
+  return {ra_catalog_deg:ra,dec_catalog_deg:dec,coordinate_frame:frame,coordinate_component:src.coordinateComponent||'catalog center',
+    ra_icrs_deg:frame==='ICRS'?ra:null,dec_icrs_deg:frame==='ICRS'?dec:null};
+}
+
 export function pointingRows(n, sources, blocks, config = defaults, stepMinutes = 10) {
   const c = validateConfig(config);
   if (!Number.isInteger(stepMinutes) || stepMinutes < 1 || stepMinutes > minutes) throw new Error('导出采样间隔无效');
@@ -213,7 +219,7 @@ export function pointingRows(n, sources, blocks, config = defaults, stepMinutes 
   const rows = [];
   for (const b of assessment.sorted) {
     const src = srcById.get(b.source), v = source(n, b.source);
-    if (!src || !finite(src.ra) || !finite(src.dec)) throw new Error('源缺少有效的 ICRS 坐标');
+    if (!src || !finite(src.ra) || !finite(src.dec)) throw new Error('源缺少有效的赤道坐标');
     const samples = [];
     for (let t = b.start; t < b.start + b.duration; t += stepMinutes) samples.push(t);
     samples.push(b.start + b.duration);
@@ -223,7 +229,7 @@ export function pointingRows(n, sources, blocks, config = defaults, stepMinutes 
       rows.push({block: b.id, source_id: src.id, source: src.name,
         event: i === samples.length - 1 ? 'END_EXCLUSIVE' : i === 0 ? 'START' : 'TRACK',
         utc: utc(n.date, t, c), local: local(n.date, t, c),
-        ra_icrs_deg: Number(src.ra.toFixed(6)), dec_icrs_deg: Number(src.dec.toFixed(6)),
+        ...coordinateColumns(src),
         az_north_east_deg: Number(az.toFixed(3)), alt_geometric_deg: Number(altitude.toFixed(3)),
       });
     });
@@ -271,4 +277,4 @@ export function restorePlan(payload, knownSources) {
 }
 
 export default {minutes, defaults, validateConfig, validDate, sample, nightBounds, reason, mask,
-  windows, validate, histogram, clock, compact, utc, local, azimuth, pointingRows, csv, restorePlan};
+  windows, validate, histogram, clock, compact, utc, local, azimuth, coordinateColumns, pointingRows, csv, restorePlan};

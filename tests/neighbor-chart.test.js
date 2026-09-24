@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { neighborEntries, knownRadius, neighborhoodRadius, extensionText } from '../src/neighbor-chart.js';
+import { neighborEntries, knownRadius, neighborhoodRadius, extensionText, gaussianComponents, renderNeighborField } from '../src/neighbor-chart.js';
 import M from '../src/planning.mjs';
 
 const source=(id,ra,dec=0,extension)=>({id,name:id,ra,dec,...(extension?{extension}:{})});
@@ -26,6 +26,32 @@ test('neighbor distances respect RA wrap and polar convergence',()=>{
   const polar=neighborEntries(source('focus',0,89),[source('across-pole',180,89),source('far',0,80)],5);
   assert.equal(polar.length,1);
   assert.ok(Math.abs(polar[0].separation-2)<1e-8);
+});
+
+test('declared Gaussian sigma contours use each component centre and avoid duplicating the primary',()=>{
+  // Deliberately synthetic values: no private catalog rows are test fixtures.
+  const sigma=value=>({kind:'gaussian-sigma',sigmaDeg:value});
+  const two={...source('synthetic',15,0,sigma(.6)),components:[
+    {id:'primary',ra:15,dec:0,extension:sigma(.6)},
+    {id:'secondary',ra:8.4,dec:0,extension:sigma(.7)},
+    {id:'duplicate',ra:8.4,dec:0,extension:sigma(.7)},
+    {id:'undefined',ra:1,dec:0,extension:{kind:'catalog-undefined',value:5}},
+  ]};
+  assert.equal(knownRadius(two),.6);
+  assert.match(extensionText(two),/二维高斯 σ 0.6°.*参考圈/);
+  assert.doesNotMatch(extensionText(two),/r39|位置误差/);
+  assert.deepEqual(gaussianComponents(two).map(s=>s.id),['synthetic::secondary']);
+  assert.equal(neighborEntries(source('focus',0),[two],8).length,1,'The secondary sigma circle crosses the field even though the main centre does not');
+  assert.equal(neighborEntries(source('focus',0),[{...two,components:[]}],8).length,0);
+  assert.deepEqual(gaussianComponents({...two,components:[{id:'WCDA',ra:8.4,dec:0,extension:{kind:'gaussian-r39',radiusDeg:.7}}]}),[]);
+  assert.equal(knownRadius(source('unknown',0,0,{kind:'catalog-undefined',value:4})),0);
+  assert.match(extensionText(source('unknown',0,0,{kind:'catalog-undefined'})),/定义见源表/);
+  const svg={getBoundingClientRect:()=>({width:500}),setAttribute:()=>{}};
+  renderNeighborField(svg,two,[],[],{fov:3,skyPadding:3,starLimit:3});
+  assert.equal((svg.innerHTML.match(/data-morphology="sigma"/g)||[]).length,2);
+  assert.equal((svg.innerHTML.match(/>σ<\/text>/g)||[]).length,2);
+  assert.ok(svg.innerHTML.includes('data-component="synthetic::secondary"'));
+  assert.ok(!svg.innerHTML.includes('data-component="synthetic::primary"'));
 });
 
 test('new display preferences default safely for legacy plans and do not alter task validation',()=>{

@@ -7,3 +7,10 @@ dist/
 .DS_Store
 __pycache__/
 .venv/
+
+# Non-public catalogs stay outside the repository and deployment assets.
+private-data/
+2[Ll][Hh][Aa][Aa][Ss][Oo]*.[Yy][Aa][Mm][Ll]
+2[Ll][Hh][Aa][Aa][Ss][Oo]*.[Yy][Mm][Ll]
+2[Ll][Hh][Aa][Aa][Ss][Oo]*.[Jj][Ss][Oo][Nn]
+2[Ll][Hh][Aa][Aa][Ss][Oo]*.[Cc][Ss][Vv]

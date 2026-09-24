@@ -30,6 +30,14 @@
   #neighbor-stars{max-height:200px;overflow:auto}
   .neighbor-star-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
 }
+@layer components {
+  .catalog-bar{display:flex;align-items:center;gap:16px;margin:-8px 0 24px;font-size:11px;color:var(--muted)}
+  .catalog-bar.is-private{color:#6e548f}.catalog-bar.is-private>span:before{content:'●';font-size:8px;margin-right:7px}
+  .catalog-summary{font-size:13px;color:var(--muted);line-height:1.8}.catalog-import-card{background:var(--bg);padding:22px;border:1px solid var(--line);border-radius:9px;margin:20px 0}.catalog-import-card h3{font-size:16px;margin:0 0 8px}.catalog-import-card p{font-size:13px;color:var(--muted)}
+  .catalog-clear-area{margin-top:18px;padding:16px;background:#fff4f4;border-radius:7px;font-size:12px}.private-label{color:#6e548f;background:#f5f0fa;border-radius:6px;padding:10px 13px;font-size:12px;line-height:1.8}
+  .source-facts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}.source-facts span{display:block;font-size:11px;color:var(--muted)}.source-facts strong{display:block;font-size:13px;font-weight:500;overflow-wrap:anywhere}
+  .catalog-fields{margin:10px 0}.catalog-fields>div{display:grid;grid-template-columns:minmax(90px,1fr) minmax(0,2fr);gap:14px;border-top:1px solid var(--line);padding:9px 0;font-size:12px}.catalog-fields dt{color:var(--muted);overflow-wrap:anywhere}.catalog-fields dd{margin:0;overflow-wrap:anywhere}.catalog-fields summary{cursor:pointer;color:var(--blue)}.catalog-fields .catalog-fields>div{grid-template-columns:minmax(70px,1fr) minmax(0,1.6fr);gap:8px}
+}
 @layer responsive {
   @media(max-width:1100px){.night-view-grid{grid-template-columns:minmax(0,1fr)}.site-sky-view{border-left:0;border-top:1px solid var(--line);padding:15px 0 0}.sky-heading,.sky-toggles{justify-content:center}#site-sky{height:360px}.sky-caption-line,.sky-hover{text-align:center}}
   @media(max-width:550px){.solar-events{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:13px}.solar-event strong{font-size:16px}.solar-event span{font-size:10px}.night-view-grid{gap:6px}#site-sky{height:330px}.sky-toggles{gap:7px 10px}.sky-heading{font-size:11px}.sky-hover{min-height:36px}.neighbor-controls>span{font-size:10px}.neighbor-star-row{font-size:10px}}

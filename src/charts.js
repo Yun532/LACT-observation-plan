@@ -105,7 +105,7 @@ export function renderAllSky(svg,sources,selectedId) {
   const w=widthOf(svg),small=w<550,L=small?39:54,R=small?15:26,top=30,height=small?280:Math.min(500,w*.39),bottom=height-38;
   const pw=w-L-R,ph=bottom-top,x=ra=>L+(360-ra)/360*pw,y=dec=>top+(90-dec)/180*ph;
   let html=`<rect x="${L}" y="${top}" width="${pw}" height="${ph}" rx="5" fill="#f8fafc" stroke="${LINE}"/>`;
-  html+=label(L,15,'ICRS 源位置','style="font-size:11px"')+label(w-R,15,'赤经向左增大','text-anchor="end" style="font-size:11px"');
+  html+=label(L,15,'目录赤道坐标','style="font-size:11px"')+label(w-R,15,'赤经向左增大','text-anchor="end" style="font-size:11px"');
   const ras=small?[0,90,180,270,360]:[0,60,120,180,240,300,360];
   for(const ra of ras) html+=line(x(ra),top,x(ra),bottom)+label(x(ra),height-19,`${ra}°`,`text-anchor="${ra===360?'start':ra===0?'end':'middle'}" style="font-size:11px"`);
   for(const dec of [-90,-60,-30,0,30,60,90]) {
