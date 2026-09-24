@@ -1,10 +1,11 @@
-import { MakeTime, Observer, Equator, Horizon, Rotation_EQJ_HOR } from 'astronomy-engine';
+import { MakeTime, Observer, Equator, Horizon, Rotation_EQJ_HOR, SearchAltitude } from 'astronomy-engine';
 
 // Geometric planning coordinates. No atmospheric refraction or telescope model.
 export const DEFAULT_SITE = Object.freeze({ latitude: 29.3586111, longitude: 100.1374972, elevation: 4410, timezone: 8 });
 export const DEFAULT_CONSTRAINTS = Object.freeze({ zmax: 70, sun: -13, moon: 40, moonMode: 'strict', trim: 0, mode: 'LACT' });
 export const DEFAULTS = Object.freeze({ ...DEFAULT_SITE, ...DEFAULT_CONSTRAINTS });
 const DEG = Math.PI / 180, MINUTE = 60000, DAY = 86400000;
+const J2000_MS = Date.UTC(2000,0,1,12), JULIAN_YEAR_MS = 365.25 * DAY, MAS_RAD = DEG / 3600000;
 const clamp = x => Math.max(-1, Math.min(1, x));
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
@@ -26,14 +27,29 @@ export function localDateMs(date, timezone = 8, hour = 18) {
   return utc + (hour - timezone) * 60 * MINUTE;
 }
 
-function vectors(sources) {
+function vectors(sources, atJulianYear) {
   const ids = new Set();
   return sources.map(s => {
     if (!s.id || ids.has(s.id)) throw new Error('源标识为空或重复');
     ids.add(s.id);
     if (!Number.isFinite(s.ra) || !Number.isFinite(s.dec) || s.ra < 0 || s.ra >= 360 || Math.abs(s.dec) > 90) throw new Error(`源 ${s.name || s.id} 坐标无效`);
-    const ra = s.ra * DEG, dec = s.dec * DEG;
-    return { id: s.id, v: [Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec)] };
+    const ra = s.ra * DEG, dec = s.dec * DEG, cr = Math.cos(ra), sr = Math.sin(ra), cd = Math.cos(dec), sd = Math.sin(dec);
+    let v = [cd * cr, cd * sr, sd], movedRA=s.ra, movedDec=s.dec;
+    if (atJulianYear !== undefined) {
+      const pmRA = s.pmRA ?? 0, pmDec = s.pmDec ?? 0, epoch = s.epochJYear ?? 2000;
+      if (![pmRA,pmDec,epoch].every(Number.isFinite)) throw new Error(`源 ${s.name || s.id} 自行或历元无效`);
+      if (pmRA !== 0 || pmDec !== 0) {
+        // pmRA already includes cos(dec). A tangent vector has no polar singularity.
+        const dt = (atJulianYear-epoch)*MAS_RAD;
+        v = [v[0]+dt*(-pmRA*sr-pmDec*sd*cr),v[1]+dt*(pmRA*cr-pmDec*sd*sr),v[2]+dt*pmDec*cd];
+        const norm = Math.hypot(...v);
+        if (!Number.isFinite(norm) || norm === 0) throw new Error(`源 ${s.name || s.id} 自行传播无效`);
+        v = v.map(value=>value/norm);
+        movedRA=(Math.atan2(v[1],v[0])/DEG+360)%360;
+        movedDec=Math.asin(clamp(v[2]))/DEG;
+      }
+    }
+    return { id: s.id, v, ra:movedRA, dec:movedDec };
   });
 }
 
@@ -48,12 +64,38 @@ function frameAt(ms, observer, bodies = true) {
   if (!bodies) return { north, west, zenith };
   const sunEq = Equator('Sun', time, observer, true, true);
   const moonEq = Equator('Moon', time, observer, true, true);
-  const sun = Horizon(time, observer, sunEq.ra, sunEq.dec, '').altitude;
+  const sun = Horizon(time, observer, sunEq.ra, sunEq.dec, '');
   const moon = Horizon(time, observer, moonEq.ra, moonEq.dec, '');
   const ca = Math.cos(moon.altitude * DEG);
   const mh = [ca * Math.cos(moon.azimuth * DEG), -ca * Math.sin(moon.azimuth * DEG), Math.sin(moon.altitude * DEG)];
   const moonEqj = [0,1,2].map(i => north[i]*mh[0] + west[i]*mh[1] + zenith[i]*mh[2]);
-  return { north, west, zenith, sun, moonalt: moon.altitude, moonaz: moon.azimuth, moonEqj };
+  return { north, west, zenith, sun: sun.altitude, sunaz: sun.azimuth, moonalt: moon.altitude, moonaz: moon.azimuth, moonEqj };
+}
+
+export function skyAt(ms, sources, input = {}) {
+  if (!Number.isFinite(ms) || !Number.isFinite(new Date(ms).getTime())) throw new Error('时刻必须为有效的 UTC 毫秒数');
+  const c=normalizeConfig(input), observer=new Observer(c.latitude,c.longitude,c.elevation);
+  const src=vectors(sources,2000+(ms-J2000_MS)/JULIAN_YEAR_MS), f=frameAt(ms,observer);
+  return {
+    sources: src.map(({id,v,ra,dec})=>({id,ra,dec,alt:Math.asin(clamp(dot(f.zenith,v)))/DEG,az:(Math.atan2(-dot(f.west,v),dot(f.north,v))/DEG+360)%360})),
+    sun: {alt:f.sun,az:f.sunaz},
+    moon: {alt:f.moonalt,az:f.moonaz},
+  };
+}
+
+export function computeSolarEvents(date, input = {}) {
+  const c=normalizeConfig(input), observer=new Observer(c.latitude,c.longitude,c.elevation);
+  const startMs=localDateMs(date,c.timezone,18), noonMs=localDateMs(date,c.timezone,12);
+  const crossing=(altitude,direction)=>{
+    const event=SearchAltitude('Sun',observer,direction,new Date(noonMs),1,altitude);
+    if (!event) return null;
+    const ms=event.date.getTime();
+    // Use a half-open observing-day interval; events may fall outside 18:00–08:00.
+    return ms>=noonMs && ms<noonMs+DAY ? (ms-startMs)/MINUTE : null;
+  };
+  // -0.833 degrees is a conventional center-altitude proxy for standard-horizon
+  // sunrise/set, not a refraction/terrain model. Twilight uses its own threshold.
+  return {sunset:crossing(-.833,-1),sunrise:crossing(-.833,1),darkStart:crossing(c.sun,-1),darkEnd:crossing(c.sun,1)};
 }
 
 export function nightBounds(night, input = {}) {
@@ -70,11 +112,11 @@ export function computeNight(date, sources, input = {}) {
   const c = normalizeConfig(input), src = vectors(sources);
   const startMs = localDateMs(date, c.timezone, 18), observer = new Observer(c.latitude,c.longitude,c.elevation);
   const moonalt = [], moonaz = [];
-  const night = { date, startMs, step: 1, minutes: 840, startHour:18, sun: [], moonalt, moonaz, moon_alt: moonalt, moon_az: moonaz, sources: {} };
+  const night = { date, startMs, step: 1, minutes: 840, startHour:18, sun: [], sunaz: [], moonalt, moonaz, moon_alt: moonalt, moon_az: moonaz, sources: {} };
   for (const s of src) night.sources[s.id] = { z: [], az: [], sep: [] };
   for (let i = 0; i <= night.minutes; i++) {
     const f = frameAt(startMs + i*MINUTE, observer);
-    night.sun.push(f.sun); moonalt.push(f.moonalt); moonaz.push(f.moonaz);
+    night.sun.push(f.sun); night.sunaz.push(f.sunaz); moonalt.push(f.moonalt); moonaz.push(f.moonaz);
     for (const s of src) {
       const a = night.sources[s.id], n = dot(f.north,s.v), w = dot(f.west,s.v), z = dot(f.zenith,s.v);
       a.z.push(Math.acos(clamp(z))/DEG);
@@ -83,6 +125,7 @@ export function computeNight(date, sources, input = {}) {
     }
   }
   night.bounds = nightBounds(night,c);
+  night.events = computeSolarEvents(date,c);
   return night;
 }
 

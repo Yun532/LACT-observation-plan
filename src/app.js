@@ -1,8 +1,10 @@
 import './style.css';
-import { computeNight, computeMonth, DEFAULTS } from './astronomy.js';
+import { computeNight, computeMonth, skyAt, DEFAULTS } from './astronomy.js';
 import M from './planning.mjs';
 import { matchesSource } from './source-search.js';
-import { COLORS, renderTrajectory, renderNeighborSky, renderAllSky, separation } from './charts.js';
+import { COLORS, renderTrajectory, renderAllSky, separation } from './charts.js';
+import { renderSiteSky } from './sky-chart.js';
+import { renderNeighborField, neighborEntries, neighborhoodRadius, extensionText } from './neighbor-chart.js';
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -23,6 +25,7 @@ config.defaultDuration = Math.max(5,Math.min(600,config.defaultDuration));
 const S = {config, sources:[], meta:{}, byId:new Map(), route:'overview', year:Number(today(config).slice(0,4)), month:Number(today(config).slice(5,7))-1, page:0, perPage:25, filter:'',catalog:'all',status:'published',sort:'month',view:'table', annual:null, worker:null, computeId:0, date:today(config), focus:'',visible:[],cursor:180,night:null,nightKey:'',blocks:[],selected:null,nextId:1,revision:1,history:[],priorities:saved.priorities && typeof saved.priorities==='object' ? saved.priorities : {},monthSource:'',monthYear:2026,monthIndex:0,monthSelected:'',monthData:null};
 let toastTimer, drag = null, assessment = null, renderFrame;
 const nightPicker = {key:'',rows:null,worker:null,error:''};
+const sky = {stars:[],meta:null,loading:false,error:'',positions:null,key:'',hits:[],showStars:saved.sky?.showStars!==false,showTracks:saved.sky?.showTracks!==false,showExtensions:saved.sky?.showExtensions!==false};
 const source = id => S.byId.get(id);
 const nightConfig = () => ({...S.config,mode:'LACT',startHour:18});
 const color = id => S.visible.includes(id) ? COLORS[S.visible.indexOf(id) % COLORS.length] : '#8793a7';
@@ -31,7 +34,7 @@ const label = s => s.name;
 const short = s => s.name.replace(/^1LHAASO\s|^LHAASO\s|^TeV\s/g,'');
 function toast(message) { $('toast').textContent=message; $('toast').hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').hidden=true,4500); }
 function safeStore(key,value) { try { localStorage.setItem(key,JSON.stringify(value)); } catch { if(!storageWarned){toast('浏览器无法保存本地草稿，请使用“保存草稿”下载计划。');storageWarned=true;} } }
-function savePreferences(){safeStore(SETTINGS_KEY,{config:S.config,priorities:S.priorities});}
+function savePreferences(){safeStore(SETTINGS_KEY,{config:S.config,priorities:S.priorities,sky:{showStars:sky.showStars,showTracks:sky.showTracks,showExtensions:sky.showExtensions}});}
 function snapshot(){return {version:1,date:S.date,config:nightConfig(),blocks:S.blocks.map(b=>({...b})),focus:S.focus,visible:[...S.visible]};}
 function savePlan(){if(!S.sources.length)return;plans[S.date]={...snapshot(),revision:S.revision};safeStore(PLAN_KEY,plans);}
 function remember(){S.history.push(JSON.stringify({blocks:S.blocks,selected:S.selected,visible:S.visible,focus:S.focus}));if(S.history.length>40)S.history.shift();}
@@ -186,14 +189,46 @@ function ensureNight(){
   if(key!==S.nightKey){S.night=computeNight(S.date,ids.map(source),nightConfig());S.nightKey=key;}
 }
 function availableMinutes(id){return sum(M.mask(S.night,id,nightConfig()).map(Number));}
+async function loadStars(){
+  if(sky.loading||sky.meta)return;
+  sky.loading=true;sky.error='';
+  try{
+    const response=await fetch(new URL('data/stars.json',document.baseURI));
+    if(!response.ok)throw new Error('恒星目录载入失败');
+    const data=await response.json();
+    if(!Array.isArray(data.stars))throw new Error('恒星目录格式不正确');
+    sky.stars=data.stars.filter(s=>typeof s.id==='string'&&s.band==='V'&&Number.isFinite(s.ra)&&s.ra>=0&&s.ra<360&&Number.isFinite(s.dec)&&Math.abs(s.dec)<=90&&Number.isFinite(s.mag)&&s.mag<=8);
+    if(!sky.stars.length)throw new Error('恒星目录中没有有效的 V 波段记录');
+    sky.meta=data.meta||{};sky.key='';
+  }catch(error){sky.error=error instanceof SyntaxError?'恒星目录暂时无法载入':error.message;}
+  sky.loading=false;if(S.route==='night')drawNightCharts();
+}
+function drawSiteSky(){
+  const c=nightConfig(),stars=sky.showStars?sky.stars.filter(s=>s.mag<=c.starLimit):[];
+  const key=S.night.startMs+'|'+S.cursor+'|'+[c.latitude,c.longitude,c.elevation,c.starLimit,sky.showStars,sky.stars.length].join('|');
+  if(key!==sky.key){sky.positions=skyAt(S.night.startMs+S.cursor*60000,[...S.sources,...stars],c);sky.key=key;}
+  const result=renderSiteSky($('site-sky'),{night:S.night,positions:sky.positions,sources:S.sources,visible:S.visible,focus:S.focus,cursor:S.cursor,config:c,stars,showTracks:sky.showTracks,showStars:sky.showStars,showExtensions:sky.showExtensions});
+  sky.hits=result.hits;
+  $('sky-time').textContent=M.clock(S.cursor,c)+' · '+timezoneLabel(c);
+  $('sky-bodies').textContent=`太阳高 ${sky.positions.sun.alt.toFixed(1)}° · ${sky.positions.sun.alt<c.sun?'满足暗夜阈值':'未满足暗夜阈值'}　月亮高 ${sky.positions.moon.alt.toFixed(1)}°${sky.positions.moon.alt<0?'（地平线下）':''}`;
+  $('star-limit').value=c.starLimit;$('sky-padding').value=c.skyPadding;
+  $('show-stars').checked=sky.showStars;$('show-tracks').checked=sky.showTracks;$('show-extensions').checked=sky.showExtensions;
+  $('star-status').innerHTML=!sky.showStars?'亮星显示已关闭':sky.meta?`V ≤ ${c.starLimit} · 地平线上 ${result.starCount} 条恒星记录 · 数值越小越亮` : sky.error?esc(sky.error)+' <button class="text-button" data-action="retry-stars">重试</button>':'正在载入亮星目录…';
+  $('star-coverage').textContent=sky.meta?.coverage||'';
+  const neighbors=neighborEntries(source(S.focus),S.sources,neighborhoodRadius(c));
+  const positions=new Map(sky.positions.sources.map(s=>[s.id,s]));
+  const nearStars=renderNeighborField($('neighbor-sky'),{...source(S.focus),plotColor:color(S.focus)},neighbors.map(s=>({...s,plotColor:color(s.id)})),stars,c,{showStars:sky.showStars,showExtensions:sky.showExtensions,positions});
+  $('neighbor-radius').textContent=`半径 ${neighborhoodRadius(c)}° · 含外围 ${c.skyPadding}°`;
+  $('neighbors').innerHTML=neighbors.map((s,i)=>`<div class="neighbor-row"><div><button data-focus="${esc(s.id)}"><span style="color:${color(s.id)}">${i+1}.</span> ${esc(s.name)}</button><small>${esc(s.catalog)} · ${esc(extensionText(s))}${s.separation<.1?' · 可能为关联条目':''}${s.separation>neighborhoodRadius(c)?' · 中心在图外，目录尺度圈或上限圈与天区相交':''}</small></div><div>${s.separation.toFixed(2)}°<button class="text-button" data-overlay="${esc(s.id)}">${S.visible.includes(s.id)?'已叠加':'叠加轨迹'}</button></div></div>`).join('')||'<div class="empty-state">该天区没有其他目录条目</div>';
+  const starUnavailable=!sky.showStars?'亮星显示已关闭':!sky.meta?'亮星目录尚未载入':'';
+  $('neighbor-stars-count').textContent=starUnavailable||`亮星 ${nearStars.length} 条记录 · V ≤ ${c.starLimit}`;
+  $('neighbor-stars').innerHTML=starUnavailable?`<p class="footnote">${starUnavailable}</p>`:nearStars.map(s=>`<div class="neighbor-star-row"><span>✦ ${esc(s.name)}</span><span>V ${s.mag.toFixed(2)} · ${separation(source(S.focus),s).toFixed(2)}°${s.alt<0?' · 地平线下':''}</span></div>`).join('')||'<p class="footnote">所选星等阈值下，此天区没有收录的恒星。</p>';
+}
 function drawNightCharts(){
   if(S.route!=='night'||!S.night)return;
   renderTrajectory($('trajectory'),S.night,S.sources,S.visible,S.focus,S.cursor,nightConfig(),S.blocks,S.selected);
   renderReadout();
-  const neighbors=S.sources.filter(s=>s.id!==S.focus).map(s=>({...s,separation:separation(source(S.focus),s)})).filter(s=>s.separation<=5).sort((a,b)=>a.separation-b.separation);
-  renderNeighborSky($('neighbor-sky'),{...source(S.focus),plotColor:color(S.focus)},neighbors.slice(0,8).map(s=>({...s,plotColor:color(s.id)})),nightConfig());
-  $('neighbors').innerHTML=neighbors.slice(0,8).map((s,i)=>`<div class="neighbor-row"><div><button data-focus="${esc(s.id)}"><span style="color:${color(s.id)}">${i+1}.</span> ${esc(s.name)}</button><small>${esc(s.catalog)} · ${esc(s.type)}${s.separation<.1?' · 可能为关联条目':''}</small></div><div>${s.separation.toFixed(2)}°<button class="text-button" data-overlay="${esc(s.id)}">${S.visible.includes(s.id)?'已叠加':'叠加轨迹'}</button></div></div>`).join('')||'<div class="empty-state">5° 内没有其他目录条目</div>';
-  if(neighbors.length>8)$('neighbors').insertAdjacentHTML('beforeend',`<p class="footnote">5° 内共 ${neighbors.length} 条，列出距离最近的 8 条。</p>`);
+  drawSiteSky();
 }
 function renderReadout(){
   const n=S.night,c=nightConfig(),focus=source(S.focus),reason=M.reason(n,S.focus,Math.min(839.5,S.cursor),c);
@@ -209,9 +244,13 @@ function renderNight(){
   $('focus-name').textContent=f.name;$('focus-coordinates').textContent=`${f.catalog} · ${f.type}　 RA ${f.ra.toFixed(4)}° / Dec ${f.dec.toFixed(4)}° · ICRS`;
   $('night-status').textContent='几何轨迹 · 1 min 步长';
   const [a,b]=M.nightBounds(S.night,c);
+  const eventTime=t=>Number.isFinite(t)?M.clock(t,c):'无此事件';
+  $('solar-events').innerHTML=[['日落',S.night.events?.sunset,'solar'],['暗夜可用开始',b>a?a:null,'dark'],['暗夜可用结束',b>a?b:null,'dark'],['日出',S.night.events?.sunrise,'solar']].map(([name,t,kind])=>`<div class="solar-event ${kind}"><span>${name}</span><strong>${b<=a&&kind==='dark'?'无暗夜窗口':eventTime(t)}</strong></div>`).join('');
+  $('solar-note').textContent=`日出日落采用太阳中心高度 −0.833° 的标准地平线近似；本时间轴暗夜窗采用太阳 < ${c.sun}°，两端裁剪 ${c.trim} min。各源还需满足天顶角和月距条件。`;
   $('trajectory-legend').innerHTML=S.visible.map((id,i)=>`<div class="legend-source"><span class="legend-dot" style="--source-color:${color(id)}"></span><button data-focus="${esc(id)}" class="${id===S.focus?'focused':''}" aria-pressed="${id===S.focus}">${i+1}. ${esc(source(id).name)}</button>${S.visible.length>1?`<button class="remove-curve" data-remove-curve="${esc(id)}" aria-label="移除${esc(source(id).name)}轨迹">×</button>`:''}</div>`).join('')+`<span class="legend-note">${b>a?'暗夜 '+M.clock(a,c)+' — '+M.clock(b,c):'本时段无暗夜窗口'}</span>`;
   $('candidates').innerHTML=S.visible.map(id=>`<div class="candidate" draggable="true" data-drag-source="${esc(id)}" style="--source-color:${color(id)}"><div class="candidate-name"><span class="legend-dot" style="--source-color:${color(id)}"></span>${esc(source(id).name)}</div><div class="candidate-hours">${hours(availableMinutes(id))}<small>当晚可用</small></div><button data-add="${esc(id)}">＋ 排入空档</button></div>`).join('');
   renderSchedule();renderHistogram();drawNightCharts();
+  if(!sky.meta&&!sky.loading&&!sky.error)loadStars();
 }
 function renderSchedule(){
   const c=nightConfig();
@@ -283,7 +322,7 @@ function openReview(){
 }
 function showAbout(){
   const quality=S.meta.quality||{};
-  $('about-content').innerHTML=`<div class="provenance-block"><h3>目录快照</h3><p>更新日期：${esc(S.meta.retrievedAt?.slice(0,10))}。${S.sources.length} 条目录记录，默认显示 ${S.sources.filter(s=>s.defaultIncluded!==false).length} 条已发布记录。目录记录不等同于独立物理天体。</p><ul>${(S.meta.catalogs||[]).map(c=>`<li><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.label)}</a>：${c.recordCount} 条${c.componentCount?'，保留 '+c.componentCount+' 个探测器分量':''}。</li>`).join('')}</ul><p>TeVCat 包含已确认、新发布、候选和有争议条目。1LHAASO 主坐标采用已探测分量中 TS 较高者；WCDA 与 KM2A 的分量位置和流强保留在数据文件。</p><h3>计算与时间口径</h3><p>Astronomy Engine 2.1.19；目录 J2000 方向包含岁差与章动变换，日月使用台站位置。高度角不含大气折射，方位角北0°、东90°。全年/逐日以10分钟中点积分，单夜以1分钟计算，边界附近结果受采样分辨率限制。</p><p>LACT 月度统计：当日正午到次日正午；LHAASO：当地00:00到24:00，仅使用天顶角条件。单夜工作台固定为 LACT，展示18:00到次日08:00。跨午夜按观测夜归属统计。使用固定UTC时差，无夏令时自动换算。</p><h3>流强与近邻</h3><p>流强必须结合单位、能段与测量口径使用。${quality.TeVCatMissingFlux||0} 条 TeVCat 流强缺失，不补零。Crab 单位的积分阈值也可能不同，排序仅供目录检索。邻近位置不自动认定为独立源，也不代替扩展源和背景区分析。</p><h3>计划保存与导出</h3><p>参数、优先级与草稿保存在当前浏览器本地。可下载JSON备份并重新导入。导入后始终按当前目录坐标重新检查；导出指向在每个任务中每10分钟采样，并保留结束半开边界。计划不包含天气、机械限位、转速、wobble或控制系统指令。</p><p><a href="https://github.com/Yun532/LACT-observation-plan" target="_blank" rel="noopener">查看源码、完整数据来源及可复现检查 ↗</a></p></div>`;
+  $('about-content').innerHTML=`<div class="provenance-block"><h3>目录快照</h3><p>更新日期：${esc(S.meta.retrievedAt?.slice(0,10))}。${S.sources.length} 条目录记录，默认显示 ${S.sources.filter(s=>s.defaultIncluded!==false).length} 条已发布记录。目录记录不等同于独立物理天体。</p><ul>${(S.meta.catalogs||[]).map(c=>`<li><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.label)}</a>：${c.recordCount} 条${c.componentCount?'，保留 '+c.componentCount+' 个探测器分量':''}。</li>`).join('')}</ul><p>TeVCat 包含已确认、新发布、候选和有争议条目。1LHAASO 主坐标采用已探测分量中 TS 较高者；WCDA 与 KM2A 的分量位置和流强保留在数据文件。</p><h3>计算与时间口径</h3><p>Astronomy Engine 2.1.19；目录 J2000 方向包含岁差与章动变换，日月使用台站位置。高度角不含大气折射，方位角北0°、东90°。全年/逐日以10分钟中点积分，单夜以1分钟计算，边界附近结果受采样分辨率限制。</p><p>LACT 月度统计：当日正午到次日正午；LHAASO：当地00:00到24:00，仅使用天顶角条件。单夜工作台固定为 LACT，展示18:00到次日08:00。跨午夜按观测夜归属统计。使用固定UTC时差，无夏令时自动换算。</p><h3>流强与近邻</h3><p>流强必须结合单位、能段与测量口径使用。${quality.TeVCatMissingFlux||0} 条 TeVCat 流强缺失，不补零。Crab 单位的积分阈值也可能不同，排序仅供目录检索。邻近位置不自动认定为独立源，也不代替扩展源和背景区分析。</p><h3>此刻天空与亮星</h3><p>天顶为中心、地平线为外圈，北上东左。亮星使用全天 V≤8 的 Gaia DR3 / SIMBAD 目录，默认显示 V≤3；Gaia 合成 V 与测量 V 的来源在数据中逐条保留。计数为目录记录数，跨目录或恒星系统分量仍可能重叠。亮星仅用于环境检查，不自动改变观测窗口或估算触发噪声。</p><p>日出日落使用太阳中心 −0.833° 的标准地平线近似，不包括本站山体遮挡；实际暗夜窗采用设置中的太阳阈值。邻近天区默认半径 8°，含原 5° 参考圈及外围 3°；视场圈采用可修改的视场半径。LHAASO r39 实测值画实线、95% 上限画虚线。TeVCat 未统一定义的角尺度仅列数值，不假定为半径。</p><h3>计划保存与导出</h3><p>参数、优先级与草稿保存在当前浏览器本地。可下载JSON备份并重新导入。导入后始终按当前目录坐标重新检查；导出指向在每个任务中每10分钟采样，并保留结束半开边界。计划不包含天气、机械限位、转速、wobble或控制系统指令。</p><p><a href="https://github.com/Yun532/LACT-observation-plan" target="_blank" rel="noopener">查看源码、完整数据来源及可复现检查 ↗</a></p></div>`;
   $('about-dialog').showModal();
 }
 function bindEvents(){
@@ -293,6 +332,7 @@ function bindEvents(){
     if(b.dataset.route){setRoute(b.dataset.route);return;}
     if(b.dataset.action==='settings'){openSettings();return;}
     if(b.dataset.action==='retry'){calculateAnnual();return;}
+    if(b.dataset.action==='retry-stars'){loadStars();return;}
     if(b.dataset.view){S.view=b.dataset.view;renderOverview();return;}
     if(b.dataset.monthSort!==undefined){S.month=+b.dataset.monthSort;S.sort='month';$('sort').value=S.sort;S.page=0;renderOverview();return;}
     if(b.dataset.priority){const id=b.dataset.priority;S.priorities[id]=(priority(id)+1)%4;savePreferences();renderOverview();toast(`${source(id).name} · ${priority(id)?'优先级 '+priority(id):'取消重点标记'}`);return;}
@@ -338,7 +378,22 @@ function bindEvents(){
   $('night-picker-settings').onclick=()=>{$('night-picker-dialog').close();openSettings();};
   $('night-search').oninput=event=>{const query=event.target.value.trim();$('night-search-results').hidden=!query;if(!query)return;const found=S.sources.filter(s=>matchesSource(s,query)).slice(0,8);$('night-search-results').innerHTML=found.map(s=>`<button data-search-source="${esc(s.id)}"><span>${esc(s.name)}</span><small>${s.catalog}</small></button>`).join('')||'<p>没有匹配的源</p>';};
   document.addEventListener('pointerdown',event=>{if(!event.target.closest('.source-picker-label'))$('night-search-results').hidden=true;});
-  $('cursor').oninput=event=>{S.cursor=+event.target.value;drawNightCharts();};
+  $('cursor').oninput=event=>{S.cursor=+event.target.value;cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(drawNightCharts);};
+  for(const [id,key] of [['show-stars','showStars'],['show-tracks','showTracks'],['show-extensions','showExtensions']])$(id).onchange=event=>{sky[key]=event.target.checked;savePreferences();drawNightCharts();};
+  for(const [id,key] of [['star-limit','starLimit'],['sky-padding','skyPadding']])$(id).onchange=event=>{
+    const value=Number(event.target.value);
+    if(!event.target.value||!event.target.reportValidity()){event.target.value=S.config[key];return;}
+    try{M.validateConfig({...S.config,[key]:value});S.config[key]=value;savePreferences();savePlan();drawNightCharts();}catch(error){toast(error.message);event.target.value=S.config[key];}
+  };
+  const skyHit=event=>{
+    const r=$('site-sky').getBoundingClientRect(),x=event.clientX-r.left,y=event.clientY-r.top;
+    const hits=sky.hits.map(h=>({...h,distance:Math.hypot(h.x-x,h.y-y)})).filter(h=>h.distance<=Math.max(5,h.r+3));
+    const rank=h=>h.kind==='source'&&h.distance<=h.r?(h.selected?0:1):2;
+    return hits.sort((a,b)=>rank(a)-rank(b)||a.distance-b.distance)[0];
+  };
+  $('site-sky').onpointermove=event=>{const h=skyHit(event);$('site-sky').style.cursor=h?.kind==='source'?'pointer':'default';$('sky-hover').textContent=h?`${h.name}${h.kind==='star'?' · V '+h.mag.toFixed(2):''} · 高度 ${h.alt.toFixed(1)}° / 方位 ${h.az.toFixed(1)}°${h.kind==='source'?' · '+extensionText(source(h.id)):''}`:'悬停查看源名、V 星等和位置；点击源切换关注。';};
+  $('site-sky').onclick=event=>{const h=skyHit(event);if(h?.kind==='source')chooseFocus(h.id);};
+  $('neighbor-sky').onclick=event=>{const id=event.target.closest('[data-neighbor-source]')?.dataset.neighborSource;if(id)chooseFocus(id);};
   $('trajectory').onpointerdown=event=>{const rect=event.currentTarget.getBoundingClientRect(),left=Number(event.currentTarget.dataset.plotLeft)||65,right=Number(event.currentTarget.dataset.plotRight)||20;S.cursor=Math.max(0,Math.min(840,Math.round((event.clientX-rect.left-left)/(rect.width-left-right)*840)));drawNightCharts();};
   $('all-sky').onclick=event=>{const node=event.target.closest('[data-source]');if(node)chooseFocus(node.dataset.source,{open:true});};
   $('all-sky').onkeydown=event=>{const node=event.target.closest('[data-source]');if(node&&['Enter',' '].includes(event.key)){event.preventDefault();chooseFocus(node.dataset.source,{open:true});}};

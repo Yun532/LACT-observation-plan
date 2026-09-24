@@ -47,6 +47,11 @@ export function renderTrajectory(svg,n,sources,visibleIds,focusId,cursor,config,
     if(small&&t===720) continue;
     html+=label(x(t),234,M.compact(t),`text-anchor="${t===0?'start':t===840?'end':'middle'}" style="font-size:11px"`);
   }
+  const markers=[['日落',n.events?.sunset,'#b27a33'],['日出',n.events?.sunrise,'#b27a33']];
+  if(b>a)markers.push(['暗夜可用开始',a,COLORS[0]],['暗夜可用结束',b,COLORS[0]]);
+  for(const [name,t,col] of markers)if(Number.isFinite(t)&&t>=0&&t<=840){
+    html+=`<path d="M${number(x(t))} 40V212" stroke="${col}" stroke-width="1.2" stroke-dasharray="3 4" opacity=".8">${title(name+' '+M.clock(t,c))}</path>`;
+  }
   for(const task of blocks) {
     if(!Number.isFinite(task.start)||!Number.isFinite(task.duration)) continue;
     const selected=String(task.id)===String(selectedTask);
@@ -94,32 +99,6 @@ export function separation(a,b) {
   const dec1=Number(a.dec)*DEG,dec2=Number(b.dec)*DEG,ra=(Number(a.ra)-Number(b.ra))*DEG;
   const cosine=Math.sin(dec1)*Math.sin(dec2)+Math.cos(dec1)*Math.cos(dec2)*Math.cos(ra);
   return Math.acos(clamp(cosine,-1,1))/DEG;
-}
-
-export function renderNeighborSky(svg,focus,neighbors,config) {
-  const w=widthOf(svg),height=270,cx=w/2,cy=137,radius=Math.min((w-58)/2,100),scale=radius/(Math.tan(5*DEG)/DEG);
-  if(!focus) { finish(svg,w,height,'','尚未选择源'); return; }
-  const fov=clamp(Number(config.fov)||3,.05,30),clip=`neighbors-${++clipCount}`;
-  let html=`<defs><clipPath id="${clip}"><circle cx="${cx}" cy="${cy}" r="${radius}"/></clipPath></defs>`;
-  html+=label(8,18,'北 ↑  东 ←','style="font-size:11px"')+label(w-8,18,'局部天区 · 半径 5°','text-anchor="end" style="font-size:11px"');
-  html+=`<circle cx="${cx}" cy="${cy}" r="${radius}" fill="#fafbfd" stroke="${LINE}"/>`;
-  html+=line(cx-radius,cy,cx+radius,cy)+line(cx,cy-radius,cx,cy+radius);
-  html+=`<g clip-path="url(#${clip})"><circle cx="${cx}" cy="${cy}" r="${Math.tan(fov*DEG)/DEG*scale}" fill="#edf2fd" fill-opacity=".6" stroke="${COLORS[0]}" stroke-opacity=".6" stroke-dasharray="5 4"/>`;
-  const sourceList=[focus,...neighbors.filter(s=>s.id!==focus.id&&separation(focus,s)<=5)];
-  sourceList.forEach((s,i)=>{
-    const ra=(s.ra-focus.ra)*DEG,d=s.dec*DEG,d0=focus.dec*DEG,den=Math.sin(d0)*Math.sin(d)+Math.cos(d0)*Math.cos(d)*Math.cos(ra);
-    if(den<=0) return;
-    const dx=-Math.cos(d)*Math.sin(ra)/den/DEG,dy=(Math.cos(d0)*Math.sin(d)-Math.sin(d0)*Math.cos(d)*Math.cos(ra))/den/DEG;
-    const xx=cx+dx*scale,yy=cy-dy*scale,col=s.plotColor||COLORS[i%COLORS.length],sep=separation(focus,s);
-    html+=`<circle cx="${number(xx)}" cy="${number(yy)}" r="${i===0?5:3.8}" fill="${col}" stroke="#fff" stroke-width="1.3">${title(`${i===0?'当前源':i+'.'} ${s.name} · 中心角距 ${sep.toFixed(3)}°`)}</circle>`;
-    // Alternate nearby label offsets so subdegree neighbors remain separable.
-    const angle=(i%6)*Math.PI/3- Math.PI/3,offset=13+(i>6?5:0);
-    html+=label(clamp(xx+Math.cos(angle)*offset,cx-radius+10,cx+radius-10),clamp(yy+Math.sin(angle)*offset+3,cy-radius+13,cy+radius-5),i===0?'◎':String(i),`text-anchor="middle" style="fill:${col};font-size:11px;font-weight:600"`);
-  });
-  html+='</g>';
-  html+=line(12,251,12+scale,251,`style="stroke:${MUTED}"`)+label(12,241,'1°','style="font-size:10px"');
-  html+=label(w-9,254,`虚线：视场半径 ${fov.toFixed(1)}°`,'text-anchor="end" style="font-size:11px"');
-  finish(svg,w,height,html,`${focus.name} 周围5度天区。北上东左，圆内数字对应下方邻近源列表。虚线表示所设视场半径，只比较源中心位置。`);
 }
 
 export function renderAllSky(svg,sources,selectedId) {

@@ -4,6 +4,7 @@ export const defaults = Object.freeze({
   mode: 'LACT', zmax: 70, sun: -13, moon: 40, moonMode: 'strict', trim: 0,
   overhead: 5, minBlock: 20, fov: 3, timezone: 8, startHour: 18,
   latitude: 29.3586111, longitude: 100.1374972, elevation: 4410,
+  starLimit: 3, skyPadding: 3,
 });
 
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -22,6 +23,7 @@ export function validateConfig(value = {}) {
     overhead: [0, 180], minBlock: [1, minutes], fov: [0.05, 30],
     timezone: [-12, 14], startHour: [0, 23], latitude: [-90, 90],
     longitude: [-180, 180], elevation: [-500, 10000],
+    starLimit: [-2, 8], skyPadding: [0, 10],
   };
   for (const [key, [low, high]] of Object.entries(ranges)) {
     const v = Object.hasOwn(value, key) ? value[key] : defaults[key];
