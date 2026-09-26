@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { equatorialToGalactic, galacticToEquatorial, projectAtlas, unprojectAtlas, atlasHourColor, renderAtlas, limitAtlasView, reachDeclinationRange, inAtlasFov } from '../src/atlas-chart.js';
+import { equatorialToGalactic, galacticToEquatorial, projectAtlas, unprojectAtlas, atlasHourColor, renderAtlas, limitAtlasView, reachDeclinationRange, inAtlasFov, LHAASO_COMPARISON } from '../src/atlas-chart.js';
 
 const close = (a, b, tol = 1e-7) => assert.ok(Math.abs(a - b) < tol, `${a} differs from ${b}`);
 const angle = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
@@ -210,5 +210,44 @@ test('changing selection preserves source tab order while drawing a noninteracti
     const decoration = svg.innerHTML.match(/<g aria-hidden="true" pointer-events="none">.*?<\/g>/);
     assert.ok(decoration && decoration.index > interactive.at(-1).index);
     assert.ok(!/tabindex|data-source|role="button"/.test(decoration[0]));
+  }
+});
+
+test('LHAASO comparison shading uses its fixed site in both frames, independently of LACT settings and layer toggles', () => {
+  assert.equal(LHAASO_COMPARISON.latitude, 29.3586111);
+  assert.equal(LHAASO_COMPARISON.longitude, 100.1374972);
+  assert.equal(LHAASO_COMPARISON.zmax, 50);
+  const range = reachDeclinationRange(LHAASO_COMPARISON);
+  close(range.min, -20.6413889); close(range.max, 79.3586111);
+  const svg = mockSvg(), target = source('target', 180, 30);
+  for (const frame of ['equatorial', 'galactic']) {
+    const config = { latitude: 29.3586111, longitude: 100.1374972, zmax: 70, fov: 8 };
+    const initial = renderAtlas(svg, [target], target.id, { frame, config, showLhaaso: true });
+    const firstPath = layerPath(svg, 'lhaaso-reach-fill'), rects = rectangles(firstPath), firstReach = layerPath(svg, 'reach-fill');
+    const v = initial.viewport;
+    let included = 0, excluded = 0;
+    for (let y = 27; y < v.height - 24; y += 14) for (let x = 2; x < v.width - 1; x += 16) {
+      const sky = unprojectAtlas((x - v.centerX) / v.baseRadius, (y - v.centerY) / v.baseRadius, frame);
+      if (!sky) continue;
+      const expected = sky.dec >= -20.6413889 && sky.dec <= 79.3586111;
+      assert.equal(covered(rects, x, y), expected);
+      if (expected) included++; else excluded++;
+    }
+    assert.ok(included > 0 && excluded > 0);
+    const borders = [...svg.innerHTML.matchAll(/<path data-atlas-layer="lhaaso-reach"[^>]*>/g)];
+    assert.equal(borders.length, 2);
+    assert.ok(borders.every(([markup]) => markup.includes('pointer-events="none"') && !markup.includes('stroke-dasharray')));
+    assert.ok(initial.hits.some(hit => hit.id === target.id));
+    renderAtlas(svg, [target], target.id, { frame, showLhaaso: true, config: { ...config, latitude: -45, longitude: -90, zmax: 15 } });
+    assert.equal(layerPath(svg, 'lhaaso-reach-fill'), firstPath);
+    assert.notEqual(layerPath(svg, 'reach-fill'), firstReach);
+    renderAtlas(svg, [target], target.id, { frame, config, showLhaaso: true, showReach: false, showFov: false });
+    assert.equal(layerPath(svg, 'lhaaso-reach-fill'), firstPath);
+    assert.equal(layerPath(svg, 'reach-fill'), undefined);
+    assert.equal(layerPath(svg, 'fov-fill'), undefined);
+    renderAtlas(svg, [target], target.id, { frame, config });
+    assert.equal(layerPath(svg, 'lhaaso-reach-fill'), undefined);
+    assert.equal(layerPath(svg, 'lhaaso-reach'), undefined);
+    assert.ok(layerPath(svg, 'reach-fill') && layerPath(svg, 'fov-fill'));
   }
 });

@@ -10,7 +10,7 @@ import { matchesSource } from './source-search.js';
 import { COLORS, renderTrajectory, renderAllSky, separation } from './charts.js';
 import { renderSiteSky, projectHorizontal } from './sky-chart.js';
 import { bindSkyNavigation, limitSkyView, zoomSkyView, skyHitsAt } from './sky-navigation.js';
-import { renderAtlas, projectAtlas, unprojectAtlas, equatorialToGalactic, limitAtlasView, reachDeclinationRange } from './atlas-chart.js';
+import { renderAtlas, projectAtlas, unprojectAtlas, equatorialToGalactic, limitAtlasView, reachDeclinationRange, LHAASO_COMPARISON } from './atlas-chart.js';
 import { renderNeighborField, neighborEntries, neighborhoodRadius, extensionText } from './neighbor-chart.js';
 import { parsePrivateCatalog, PRIVATE_CATALOG_LIMITS } from './private-catalog.js';
 import { catalogFingerprint, localCatalog, combineCatalogs, checkPlanCatalogIdentity, PRIVATE_PLAN_PREFIX, PRIVATE_PRIORITY_PREFIX } from './local-catalog-store.js';
@@ -39,7 +39,7 @@ const clearEpoch=()=>{try{return Number(localStorage.getItem(CLEAR_PRIVATE_KEY))
 let privateEpoch=clearEpoch();
 const nightPicker = {key:'',rows:null,worker:null,error:''};
 const sky = {stars:[],meta:null,loading:false,error:'',positions:null,key:'',hits:[],view:{zoom:1,x:0,y:0},viewport:null,showStars:saved.sky?.showStars!==false,showNeighborStars:(saved.sky?.showNeighborStars??saved.sky?.showStars)!==false,showTracks:saved.sky?.showTracks!==false,showExtensions:saved.sky?.showExtensions!==false};
-const atlas = {mode:'atlas',frame:'equatorial',colorBy:'catalog',showGrid:true,showPlane:true,showReach:true,showFov:true,showLabels:false,view:{zoom:1,x:0,y:0},inspected:'',limit:12,result:null,expanded:false};
+const atlas = {mode:'atlas',frame:'equatorial',colorBy:'catalog',showGrid:true,showPlane:true,showReach:true,showLhaaso:true,showFov:true,showLabels:false,view:{zoom:1,x:0,y:0},inspected:'',limit:12,result:null,expanded:false};
 const source = id => S.byId.get(id);
 const nightConfig = () => ({...S.config,mode:'LACT',startHour:18});
 const color = id => S.visible.includes(id) ? COLORS[S.visible.indexOf(id) % COLORS.length] : '#8793a7';
@@ -243,11 +243,14 @@ function drawAtlasMap(items=filteredSources()){
   const range=reachDeclinationRange(S.config),signed=n=>(n>=0?'+':'')+n.toFixed(2)+'°';
   $('atlas-reach-range').textContent=range?`每日过境范围 · 赤纬 ${signed(range.min)} 至 ${signed(range.max)}`:'';
   $('atlas-reach-explanation').textContent=`浅绿色区域表示天体在上中天（一天中位置最高）时能满足天顶角限制的天区；虚线是它的边界。最低天顶角 z = |赤纬 − 台站纬度|。当前台站纬度 ${signed(S.config.latitude)}，经度 ${signed(S.config.longitude)}（东经为正），天顶角上限 ${S.config.zmax}°。纬度决定这一全天范围；经度影响过境时刻，不改变每日过境的总范围。区域覆盖上述赤纬范围内的全部赤经，并非此刻同时可见的天空。`;
+  const lhaasoRange=reachDeclinationRange(LHAASO_COMPARISON);
+  $('atlas-lhaaso-explanation').textContent=`橙色区域为 LHAASO 比较天区，实线是它的边界：采用固定站址纬度 ${signed(LHAASO_COMPARISON.latitude)}、经度 ${signed(LHAASO_COMPARISON.longitude)}，天顶角 ≤ ${LHAASO_COMPARISON.zmax}°，对应赤纬 ${signed(lhaasoRange.min)} 至 ${signed(lhaasoRange.max)}。该图层固定使用这些参数，可与当前观测设置独立开关比较；只表示每日过境范围，不表示探测效率。`;
+  $('atlas-lhaaso-explanation').hidden=!atlas.showLhaaso;
   $('atlas-fov-radius').value=S.config.fov;
   $('atlas-fov-size').textContent=`直径 ${+(S.config.fov*2).toFixed(3)}° · 与单夜视场共用设置`;
   $('atlas-center-fov').disabled=!source(atlas.inspected);
   $('atlas-legend').innerHTML=atlas.colorBy==='month'&&!classic?'<span>月度可观测 / h</span><span>0</span><i class="atlas-hours-scale"></i><span>≥ 240</span><span class="atlas-missing-key">灰色：待计算</span>':'<span><i class="atlas-key tev"></i>TeVCat</span><span><i class="atlas-key lhaaso"></i>LHAASO</span><span><i class="atlas-key fermi"></i>Fermi（已选）</span><span class="atlas-missing-key">圆点表示目录位置</span>';
-  if(!classic)$('atlas-legend').insertAdjacentHTML('beforeend',(atlas.showReach?'<span title="每日过境时满足天顶角条件的范围"><i class="atlas-region-key reach" aria-hidden="true"></i>可观测天区</span>':'')+(atlas.showFov&&source(atlas.inspected)?'<span><i class="atlas-region-key fov" aria-hidden="true"></i>目标视场</span>':''));
+  if(!classic)$('atlas-legend').insertAdjacentHTML('beforeend',(atlas.showReach?`<span title="当前设置：每日过境时满足天顶角条件的范围"><i class="atlas-region-key reach" aria-hidden="true"></i>可观测天区 · z ≤ ${S.config.zmax}°</span>`:'')+(atlas.showLhaaso?'<span title="LHAASO 固定站址，每日过境范围"><i class="atlas-region-key lhaaso-reach" aria-hidden="true"></i>LHAASO · z ≤ 50°</span>':'')+(atlas.showFov&&source(atlas.inspected)?'<span><i class="atlas-region-key fov" aria-hidden="true"></i>目标视场</span>':''));
 }
 function renderAtlasDetail(){
   const s=source(atlas.inspected);
@@ -647,7 +650,7 @@ function bindEvents(){
   $('atlas-mode').onchange=event=>{atlas.mode=event.target.value;if(atlas.mode==='classic'&&atlas.expanded)expandAtlas(false);renderAtlasView();};
   $('atlas-frame').onchange=event=>{atlas.frame=event.target.value;atlas.view={zoom:1,x:0,y:0};drawAtlasMap();};
   $('atlas-color').onchange=event=>{atlas.colorBy=event.target.value;drawAtlasMap();};
-  for(const [id,key] of [['atlas-grid','showGrid'],['atlas-plane','showPlane'],['atlas-reach','showReach'],['atlas-fov','showFov'],['atlas-labels','showLabels']])$(id).onchange=event=>{atlas[key]=event.target.checked;drawAtlasMap();if(key==='showFov')renderAtlasDetail();};
+  for(const [id,key] of [['atlas-grid','showGrid'],['atlas-plane','showPlane'],['atlas-reach','showReach'],['atlas-lhaaso','showLhaaso'],['atlas-fov','showFov'],['atlas-labels','showLabels']])$(id).onchange=event=>{atlas[key]=event.target.checked;drawAtlasMap();if(key==='showFov')renderAtlasDetail();};
   $('atlas-fov-radius').onchange=event=>{
     if(!event.target.reportValidity()||!event.target.value){event.target.value=S.config.fov;return;}
     S.config={...S.config,...M.validateConfig({...S.config,fov:Number(event.target.value)})};

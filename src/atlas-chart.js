@@ -1,3 +1,7 @@
+import { DEFAULT_SITE } from './astronomy.js';
+
+export const LHAASO_COMPARISON = Object.freeze({ latitude: DEFAULT_SITE.latitude, longitude: DEFAULT_SITE.longitude, zmax: 50 });
+
 const D = Math.PI / 180;
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const wrap = n => ((n % 360) + 360) % 360;
@@ -138,7 +142,7 @@ function regionPath(grid, contains) {
 }
 
 export function renderAtlas(svg, sources, selectedId, options = {}) {
-  const { frame = 'equatorial', showGrid = true, showPlane = true, showReach = true, showFov = true, showLabels = false, colorBy = 'catalog', month = 0, monthly = null, config = {}, view = {} } = options;
+  const { frame = 'equatorial', showGrid = true, showPlane = true, showReach = true, showLhaaso = false, showFov = true, showLabels = false, colorBy = 'catalog', month = 0, monthly = null, config = {}, view = {} } = options;
   const width = Math.max(240, Math.round(svg.getBoundingClientRect().width || 900));
   const height = clamp(width * .52, 320, 520), baseRadius = Math.min((width - 62) / 2, height - 76);
   const centerX = width / 2, centerY = height / 2 + 2, zoom = clamp(view.zoom || 1, 1, 12);
@@ -151,8 +155,9 @@ export function renderAtlas(svg, sources, selectedId, options = {}) {
   let html = `<defs><clipPath id="${bounds}"><rect x="1" y="26" width="${width - 2}" height="${height - 50}" rx="8"/></clipPath><clipPath id="${clip}"><ellipse cx="${center.x}" cy="${center.y}" rx="${radius}" ry="${radius / 2}"/></clipPath></defs>`;
   html += `<g clip-path="url(#${bounds})"><ellipse cx="${center.x}" cy="${center.y}" rx="${radius}" ry="${radius / 2}" fill="#f7f9fb" stroke="#cbd5df" stroke-width="1.1"/><g clip-path="url(#${clip})">`;
   const reach = showReach ? reachDeclinationRange(config) : null;
+  const lhaaso = showLhaaso ? reachDeclinationRange(LHAASO_COMPARISON) : null;
   const focus = showFov && Number.isFinite(config.fov) && config.fov > 0 && config.fov <= 180 ? sources.find(s => s.id === selectedId && projectAtlas(s.ra, s.dec, frame)) : null;
-  if (reach || focus) {
+  if (reach || lhaaso || focus) {
     const grid = regionGrid(svg, width, height, center, radius, frame);
     if (reach) {
       const key = `${reach.min},${reach.max}`;
@@ -162,6 +167,11 @@ export function renderAtlas(svg, sources, selectedId, options = {}) {
         grid.reachKey = key;
       }
       html += `<path data-atlas-layer="reach-fill" d="${grid.reachPath}" fill="#268b83" fill-opacity=".09" pointer-events="none"><title>可观测天区（每日过境范围）：赤纬 ${reach.min.toFixed(1)}° 至 ${reach.max.toFixed(1)}°；仅天顶角条件</title></path>`;
+    }
+    if (lhaaso) {
+      const low = Math.sin(lhaaso.min * D), high = Math.sin(lhaaso.max * D);
+      grid.lhaasoPath ??= regionPath(grid, (_x, _y, z) => z >= low && z <= high);
+      html += `<path data-atlas-layer="lhaaso-reach-fill" d="${grid.lhaasoPath}" fill="#bd7045" fill-opacity=".09" pointer-events="none"><title>LHAASO 比较天区：固定站址，天顶角 ≤ ${LHAASO_COMPARISON.zmax}°；赤纬 ${lhaaso.min.toFixed(1)}° 至 ${lhaaso.max.toFixed(1)}°，仅几何范围</title></path>`;
     }
     if (focus) {
       const key = `${focus.ra},${focus.dec},${config.fov}`;
@@ -199,6 +209,12 @@ export function renderAtlas(svg, sources, selectedId, options = {}) {
     for (const dec of [reach.min, reach.max].filter(d => d > -90 && d < 90)) {
       const points = Array.from({ length: 721 }, (_, i) => ({ ra: i / 2, dec }));
       html += `<path data-atlas-layer="reach" d="${skyPath(points)}" fill="none" stroke="#268b83" stroke-width="1.2" stroke-opacity=".65" stroke-dasharray="3 5"><title>可观测天区边界 δ=${dec.toFixed(1)}°；每日过境范围，仅天顶角条件，不含太阳、月亮与日期</title></path>`;
+    }
+  }
+  if (lhaaso) {
+    for (const dec of [lhaaso.min, lhaaso.max]) {
+      const points = Array.from({ length: 721 }, (_, i) => ({ ra: i / 2, dec }));
+      html += `<path data-atlas-layer="lhaaso-reach" d="${skyPath(points)}" fill="none" stroke="#bd7045" stroke-width="1.5" stroke-opacity=".85" pointer-events="none"><title>LHAASO 比较天区边界 δ=${dec.toFixed(1)}°；固定站址、天顶角 ≤ ${LHAASO_COMPARISON.zmax}°，仅几何范围</title></path>`;
     }
   }
   if (focus) html += `<path data-atlas-layer="fov" d="${skyPath(fovBoundary(focus, config.fov))}" fill="none" stroke="#426bc2" stroke-width="1.5" stroke-dasharray="5 3" pointer-events="none"><title>${esc(focus.name ?? focus.id)} 为指向中心，视场半径 ${config.fov}°（直径 ${2 * config.fov}°）；表示角范围，不含接收效率</title></path>`;
