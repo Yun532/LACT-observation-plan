@@ -1,6 +1,6 @@
 // Normalize input for lookup without changing catalog names or source identity.
 const normalize = value => String(value ?? '').normalize('NFKC').toLowerCase()
-  .replace(/\bmrk(?=\s*\d|\b)/g, 'markarian').replace(/\s+/g, '');
+  .replace(/\b(?:mrk|mkn)(?=\s*\d|\b)/g, 'markarian').replace(/\s+/g, '');
 
 export function matchesSource(source, query) {
   const needle = normalize(query);

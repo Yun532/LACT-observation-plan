@@ -219,7 +219,7 @@ export function renderAtlas(svg, sources, selectedId, options = {}) {
     if (!inView(p)) continue;
     const selected = s.id === selectedId, hours = monthly?.[s.id]?.[month];
     const catalog = Array.isArray(s.catalogs) ? s.catalogs.join(' ') : String(s.catalog || '');
-    const color = colorBy === 'month' ? atlasHourColor(hours) : /lhaaso/i.test(catalog) ? '#268b83' : '#426bc2';
+    const color = colorBy === 'month' ? atlasHourColor(hours) : /lhaaso/i.test(catalog) ? '#268b83' : /4FGL|fermi/i.test(catalog) ? '#8760b8' : '#426bc2';
     const r = selected ? 5 : 3.2, name = String(s.name ?? s.id);
     const title = `${name} · RA ${s.ra.toFixed(3)}° · Dec ${s.dec.toFixed(3)}°${colorBy === 'month' ? ` · ${Number.isFinite(hours) ? `${month + 1}月 ${hours.toFixed(1)} h` : '可观测时长尚未计算'}` : ` · ${catalog}`}`;
     if (selected) selectedDecoration = `<g aria-hidden="true" pointer-events="none"><circle cx="${p.x}" cy="${p.y}" r="10" fill="#ffffff" fill-opacity=".8" stroke="#263e60" stroke-width="1.2"/><circle cx="${p.x}" cy="${p.y}" r="5" fill="${color}" stroke="#fff" stroke-width="1.5"/></g>`;

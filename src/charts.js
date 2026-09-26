@@ -117,7 +117,7 @@ export function renderAllSky(svg,sources,selectedId) {
     if(!Number.isFinite(s.ra)||!Number.isFinite(s.dec)) continue;
     const selected=s.id===selectedId,xx=x(s.ra),yy=y(s.dec);
     const catalog=Array.isArray(s.catalogs)?s.catalogs.join(' '):String(s.catalog || '');
-    const color=catalog.toLowerCase().includes('lhaaso')?COLORS[2]:COLORS[0];
+    const color=catalog.toLowerCase().includes('lhaaso')?COLORS[2]:/4FGL|fermi/i.test(catalog)?'#8760b8':COLORS[0];
     html+=`<circle cx="${number(xx)}" cy="${number(yy)}" r="${selected?5:2.6}" fill="${selected?INK:color}" fill-opacity="${selected?1:.63}" stroke="${selected?'#fff':'none'}" stroke-width="2" data-source="${escape(s.id)}" tabindex="0" role="button" aria-label="${escape(`查看 ${s.name}`)}">${title(`${s.name} · RA ${s.ra.toFixed(3)}° · Dec ${s.dec.toFixed(3)}°`)}</circle>`;
     if(selected) {
       html+=`<circle cx="${number(xx)}" cy="${number(yy)}" r="9" fill="none" stroke="${INK}" stroke-opacity=".45" pointer-events="none"/>`;

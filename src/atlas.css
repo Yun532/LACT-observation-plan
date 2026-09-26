@@ -42,6 +42,8 @@
   .atlas-legend>span{display:inline-flex;align-items:center;gap:6px}
   .atlas-key{width:7px;height:7px;border-radius:50%;display:inline-block;background:#426bc2}
   .atlas-key.lhaaso{background:#268b83}
+  .atlas-key.fermi{background:#8760b8}
+  .atlas-detail .atlas-source-context{font-size:10px;line-height:1.8;color:#6c8290;margin-top:12px}
   .atlas-missing-key{color:#89979b;font-size:10px}
   .atlas-hours-scale{display:block;width:80px;height:6px;border-radius:3px;background:linear-gradient(90deg,#e6eef7,#85a0cb,#24529f)}
   .atlas-zoom{display:flex;align-items:center;gap:5px}

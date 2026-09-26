@@ -1,5 +1,9 @@
 import './style.css';
 import './atlas.css';
+import './source-info.css';
+import './fermi-explorer.css';
+import { renderSourceInfo, sourceSummary } from './source-info.js';
+import { createFermiExplorer } from './fermi-explorer.js';
 import { computeNight, computeMonth, skyAt, DEFAULTS } from './astronomy.js';
 import M from './planning.mjs';
 import { matchesSource } from './source-search.js';
@@ -42,18 +46,63 @@ const color = id => S.visible.includes(id) ? COLORS[S.visible.indexOf(id) % COLO
 const priority = id => [1,2,3].includes(S.priorities[id]) ? S.priorities[id] : 0;
 const label = s => s.name;
 const short = s => s.name.replace(/^[12]LHAASO\s|^LHAASO\s|^TeV\s/g,'');
+const isFermiId=id=>typeof id==='string'&&id.startsWith('fermi:4fgl:');
+const fermiIds=new Set(Array.isArray(saved.fermiIds)?saved.fermiIds.filter(isFermiId):[]);
+let fermiRecoveryPending=false;
+const sourceFrame=s=>s.private||String(s.coordinateFrame).startsWith('FK5')?'FK5 / J2000':'ICRS';
+const planFermiIds=p=>[p?.focus,...(Array.isArray(p?.visible)?p.visible:[]),...(Array.isArray(p?.blocks)?p.blocks.map(b=>b?.source):[])].filter(isFermiId);
+const fermi=createFermiExplorer({getContext:()=>({config:S.config,selectedIds:[...fermiIds],focus:source(S.focus)}),onAdd:addFermiSource,onRemove:removeFermiSource,onInspect:sourceDetails});
+async function openFermiLibrary(){
+  await fermi.open();
+  if(fermiRecoveryPending&&fermi.meta){
+    activateCatalog(privateCatalog,privateFingerprint,catalogRemembered,{discard:true,recovered:true});
+    toast('Fermi 源库已恢复，原有源选择与草稿已重新载入。');
+  }
+}
+function savedPlanSets(){
+  try{return Array.from({length:localStorage.length},(_,i)=>localStorage.key(i)).filter(k=>k===PLAN_KEY||k?.startsWith(PRIVATE_PLAN_PREFIX)).map(readLocalObject);}catch{return [plans];}
+}
+function rebuildWorkingCatalog(){
+  const base=combineCatalogs(publicCatalog,privateCatalog),extra=[...fermiIds].map(id=>fermi.getById(id)).filter(Boolean);
+  S.sources=[...base.sources,...extra];S.byId=new Map(S.sources.map(s=>[s.id,s]));
+  S.meta={...base.meta,catalogs:[...(base.meta.catalogs||[]),...(extra.length?[{id:'4FGL-DR4',label:'Fermi 4FGL-DR4 · 已选观测源',recordCount:extra.length,url:'https://fermi.gsfc.nasa.gov/ssc/data/access/lat/14yr_catalog/'}]:[])]};
+}
+function refreshFermiSelection(){
+  rebuildWorkingCatalog();savePreferences();invalidateNight();sky.key='';
+  nightPicker.worker?.terminate();Object.assign(nightPicker,{key:'',rows:null,worker:null,error:''});
+  S.visible=S.visible.filter(id=>source(id));
+  if(!source(S.focus))S.focus=S.visible[0]||S.sources[0].id;
+  if(!S.visible.includes(S.focus))S.visible=[S.focus,...S.visible].slice(0,6);
+  if(!S.sources.some(s=>s.catalog===S.catalog))S.catalog='all';
+  renderCatalogState();calculateAnnual();if(S.route==='night')renderNight();
+}
+async function addFermiSource(id,{openNight=false}={}){
+  const item=fermi.getById(id);if(!item)return false;
+  if(!fermiIds.has(id)){fermiIds.add(id);refreshFermiSelection();toast('已加入观测源，可查看全年窗口与单夜轨迹。');}
+  if(openNight)chooseFocus(id,{open:true});
+  return true;
+}
+function removeFermiSource(id){
+  if(S.blocks.some(b=>b.source===id)||savedPlanSets().some(set=>Object.values(set).some(p=>Array.isArray(p?.blocks)&&p.blocks.some(b=>b?.source===id)))){toast('这个源仍被观测任务使用；先移除相关任务并保存草稿，再从源库移除。');return false;}
+  fermiIds.delete(id);S.history=S.history.filter(entry=>!planFermiIds(JSON.parse(entry)).includes(id));
+  refreshFermiSelection();savePlan();return true;
+}
 function toast(message) { $('toast').textContent=message; $('toast').hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').hidden=true,4500); }
 function safeStore(key,value) { try { localStorage.setItem(key,JSON.stringify(value)); } catch { if(!storageWarned){toast('浏览器无法保存本地草稿，请使用“保存草稿”下载计划。');storageWarned=true;} } }
 function savePreferences(){
   if(privateCatalog){if(privateEpoch===clearEpoch())safeStore(PRIVATE_PRIORITY_PREFIX+privateFingerprint,S.priorities);}else saved.priorities=S.priorities;
-  safeStore(SETTINGS_KEY,{config:S.config,priorities:saved.priorities||{},sky:{showStars:sky.showStars,showNeighborStars:sky.showNeighborStars,showTracks:sky.showTracks,showExtensions:sky.showExtensions}});
+  safeStore(SETTINGS_KEY,{config:S.config,fermiIds:[...fermiIds],priorities:saved.priorities||{},sky:{showStars:sky.showStars,showNeighborStars:sky.showNeighborStars,showTracks:sky.showTracks,showExtensions:sky.showExtensions}});
 }
 function snapshot(){return {version:1,date:S.date,catalogIdentity:privateCatalog?{private:true,fingerprint:privateFingerprint}:{private:false},config:nightConfig(),blocks:S.blocks.map(b=>({...b})),focus:S.focus,visible:[...S.visible]};}
-function savePlan(){if(!S.sources.length||(privateCatalog&&privateEpoch!==clearEpoch()))return;plans[S.date]={...snapshot(),revision:S.revision};safeStore(privateCatalog?PRIVATE_PLAN_PREFIX+privateFingerprint:PLAN_KEY,plans);}
+function savePlan(){if(fermiRecoveryPending||!S.sources.length||(privateCatalog&&privateEpoch!==clearEpoch()))return;plans[S.date]={...snapshot(),revision:S.revision};safeStore(privateCatalog?PRIVATE_PLAN_PREFIX+privateFingerprint:PLAN_KEY,plans);}
 function restoreCatalogPlan(payload){
   if(typeof payload==='string'){if(payload.length>2_000_000)throw new Error('计划文件过大');payload=JSON.parse(payload);}
   checkPlanCatalogIdentity(payload,privateCatalog?privateFingerprint:'');
-  return M.restorePlan(payload,S.sources);
+  const restored=M.restorePlan(payload,[...S.sources,...fermi.sources]);
+  if(restored.config.startHour!==18)throw new Error('本站单夜工作台仅支持18:00起始的计划');
+  if(+restored.date.slice(0,4)<2000||+restored.date.slice(0,4)>2100)throw new Error('计划年份需在2000–2100范围内');
+  for(const id of planFermiIds(restored))fermiIds.add(id);
+  rebuildWorkingCatalog();return restored;
 }
 function remember(){S.history.push(JSON.stringify({blocks:S.blocks,selected:S.selected,visible:S.visible,focus:S.focus}));if(S.history.length>40)S.history.shift();}
 function edited(message){S.revision++;savePlan();renderNight();if(message)$('schedule-message').textContent=message;}
@@ -62,30 +111,32 @@ function conditions(c){return c.mode==='LHAASO' ? `LHAASO · z ≤ ${c.zmax}° �
 function readLocalObject(key){try{const value=JSON.parse(localStorage.getItem(key)||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}}
 function renderCatalogState(){
   const active=!!privateCatalog;
-  $('catalog-state').textContent=active?'本地私有 · TeVCat + 2LHAASO':'公开目录 · TeVCat + 1LHAASO';
+  $('catalog-state').textContent=(active?'本地私有 · TeVCat + 2LHAASO':'公开目录 · TeVCat + 1LHAASO')+(fermiRecoveryPending?' · Fermi 待重试':fermiIds.size?` + Fermi × ${fermiIds.size}`:'');
   $('catalog-bar').classList.toggle('is-private',active);
   $('catalog-summary').textContent=active?`已使用本地二期源表，${catalogRemembered?'此设备已记住目录':'仅本次打开有效'}。原始文件和解析数据均不上传。`:'当前使用随网站发布的公开源表。导入私有源表后，仅在本机替换 1LHAASO。';
   $('catalog-notes').hidden=!active;
   $('catalog-notes-list').innerHTML=active?[...(privateCatalog.meta.warnings||[]),...(privateCatalog.meta.notes||[])].map(note=>'<li>'+esc(note)+'</li>').join(''):'';
   $('catalog-revert').disabled=!active;$('catalog-remember').checked=catalogRemembered||!active;
-  $('catalog-foot').textContent=`TeVCat × ${active?'2LHAASO · 本地私有':'1LHAASO'} · ${S.sources.length} 条记录`;
+  $('catalog-foot').textContent=`TeVCat × ${active?'2LHAASO · 本地私有':'1LHAASO'}${fermiIds.size?' × Fermi（已选）':''} · ${S.sources.length} 条记录`;
+  document.querySelectorAll('[data-open-fermi]').forEach(b=>b.textContent=`Fermi 扩展源库${fermiIds.size?' · 已选 '+fermiIds.size:''}`);
+  $('fermi-load-status').hidden=!fermiRecoveryPending;
   for(const id of ['catalog-filter','night-picker-catalog']){const old=$(id).value;$(id).innerHTML='<option value="all">全部目录</option>'+[...new Set(S.sources.map(s=>s.catalog))].map(c=>`<option value="${esc(c)}">${esc(c)}${c==='2LHAASO'?' · 本地':''}</option>`).join('');$(id).value=[...$(id).options].some(o=>o.value===old)?old:'all';}
   $('catalog-filter').value=S.catalog;
   for(const id of ['status-filter','night-picker-status'])$(id).querySelector('[value="published"]').textContent=active?'默认源（含本地）':'已发布源';
   $('private-export-note').hidden=!active;
 }
-function activateCatalog(catalog,fingerprint='',remembered=false,{initial=false,discard=false}={}){
+function activateCatalog(catalog,fingerprint='',remembered=false,{initial=false,discard=false,recovered=false}={}){
   if(!initial){clearTimeout(toastTimer);$('toast').textContent='';$('toast').hidden=true;}
   if(!initial&&!discard){savePlan();savePreferences();}
+  if(recovered)fermiRecoveryPending=false;
   S.worker?.terminate();nightPicker.worker?.terminate();S.computeId++;cancelAnimationFrame(renderFrame);
   privateCatalog=catalog;privateFingerprint=fingerprint;catalogRemembered=remembered;privateEpoch=clearEpoch();
-  const combined=combineCatalogs(publicCatalog,catalog);
-  S.sources=combined.sources;S.meta=combined.meta;S.byId=new Map(S.sources.map(s=>[s.id,s]));
+  rebuildWorkingCatalog();
   plans=readLocalObject(catalog?PRIVATE_PLAN_PREFIX+fingerprint:PLAN_KEY);
   S.priorities=catalog?readLocalObject(PRIVATE_PRIORITY_PREFIX+fingerprint):(saved.priorities||{});
   Object.assign(S,{annual:null,worker:null,blocks:[],selected:null,nextId:1,revision:1,history:[],filter:'',catalog:'all',page:0,monthData:null,monthSource:''});
   S.focus=source('tevcat-87')?'tevcat-87':S.sources[0].id;S.visible=[S.focus,...['tevcat-424','tevcat-74'].filter(id=>source(id)&&id!==S.focus)];
-  if(plans[S.date]){try{restoreSnapshot(restoreCatalogPlan(plans[S.date]));S.revision=Number(plans[S.date].revision)||1;}catch{toast('此目录下的草稿无法恢复；已保留原草稿并打开空计划。');}}
+  if(plans[S.date]&&!fermiRecoveryPending){try{restoreSnapshot(restoreCatalogPlan(plans[S.date]));S.revision=Number(plans[S.date].revision)||1;}catch{toast('此目录下的草稿无法恢复；已保留原草稿并打开空计划。');}}
   S.selected=S.blocks[0]?.id??null;S.nextId=Math.max(0,...S.blocks.map(b=>b.id))+1;
   invalidateNight();Object.assign(nightPicker,{key:'',rows:null,worker:null,error:''});Object.assign(sky,{key:'',positions:null,hits:[]});drag=null;assessment=null;
   for(const id of ['month-dialog','review-dialog','night-picker-dialog','about-dialog','source-dialog']){const dialog=$(id);if(dialog.open)dialog.close();}
@@ -97,7 +148,7 @@ function activateCatalog(catalog,fingerprint='',remembered=false,{initial=false,
   $('atlas-picks').hidden=true;$('atlas-readout').textContent='悬停查看坐标与源信息；点击源进入单夜工作台。';
   for(const id of ['source-title','month-title','month-coordinates','month-caption','night-picker-list','night-picker-selected','all-sky'])$(id).replaceChildren();
   $('review-confirm').checked=false;document.querySelectorAll('[data-export]').forEach(b=>b.disabled=true);
-  renderCatalogState();renderConditions();
+  fermi.refresh();renderCatalogState();renderConditions();
   if(!initial){const route=S.route;S.route='night';renderNight();S.route=route;setRoute(route);calculateAnnual();}
 }
 async function importLocalCatalog(file){
@@ -107,6 +158,7 @@ async function importLocalCatalog(file){
     if(file.size>PRIVATE_CATALOG_LIMITS.bytes)throw new Error('源表不能超过 2 MiB');
     const text=await file.text(),parsed=parsePrivateCatalog(text,file.name),fingerprint=await catalogFingerprint(text);
     if(startedEpoch!==clearEpoch())throw new Error('另一页面已清除私有数据，请重新选择文件');
+    if(Object.values(readLocalObject(PRIVATE_PLAN_PREFIX+fingerprint)).some(p=>planFermiIds(p).length))await fermi.load();
     let remembered=$('catalog-remember').checked;
     try{await localCatalog(remembered?'write':'remove',remembered?{text,filename:file.name,savedAt:Math.max(Date.now(),startedEpoch+1)}:undefined);}catch{remembered=false;throw new Error('无法更新本机存储，源表尚未切换。请检查浏览器存储权限。');}
     if(startedEpoch!==clearEpoch()){await localCatalog('remove');throw new Error('另一页面已清除私有数据，请重新选择文件');}
@@ -116,15 +168,9 @@ async function importLocalCatalog(file){
   finally{catalogBusy=false;$('catalog-choose').disabled=false;$('catalog-file').value='';}
 }
 function sourceDetails(id){
-  const s=source(id);if(!s)return;
+  const s=source(id)||fermi.getById(id);if(!s)return;
   $('source-title').textContent=s.name;
-  const names={sed_model:'能谱模型',spatial_model:'空间模型',each_bin:'逐能段结果',statistics:'拟合统计',parameters:'参数',ra:'赤经 / °',dec:'赤纬 / °',value:'数值',unit:'单位',error:'误差',type:'模型类型',spatial_type:'空间模型类型',sed_type:'能谱类型',ext:'延展参数 / °',ext1:'附加分量延展 / °',ext_err:'延展误差 / °',ra1:'附加分量赤经 / °',dec1:'附加分量赤纬 / °','p_err(95%)':'95% 定位误差 / °'};
-  const fields=(value,depth=0)=>{
-    if(value===null||value===undefined)return '<span class="muted">未提供</span>';
-    if(typeof value!=='object')return esc(value);
-    return '<dl class="catalog-fields">'+Object.entries(value).map(([key,v])=>`<div><dt>${esc(names[key]||key)}</dt><dd>${v&&typeof v==='object'?`<details ${depth<1?'open':''}><summary>查看${Array.isArray(v)?'各项结果':'参数'}</summary>${fields(v,depth+1)}</details>`:fields(v,depth+1)}</dd></div>`).join('')+'</dl>';
-  };
-  $('source-details').innerHTML=`<p class="${s.private?'private-label':'muted'}">${esc(s.catalog)} · ${s.private?'非公开 · 仅保存在此设备':esc(statusNames[s.status]||'目录记录')}</p><div class="source-facts"><div><span>规划坐标 / ${s.private?'FK5 / J2000':'ICRS'}</span><strong>${s.ra.toFixed(4)}° / ${s.dec.toFixed(4)}°</strong></div><div><span>扩展尺度</span><strong>${esc(extensionText(s))}</strong></div><div><span>流强参考</span><strong>${esc(fluxDescription(s))}</strong></div></div>${s.coordinateNote?'<p class="footnote">'+esc(s.coordinateNote)+'</p>':''}<p class="footnote">数值、误差与单位以原目录字段为准；不同能谱模型和能段的归一化不能直接比较。</p>${fields(s.catalogData||{components:s.components||[],extension:s.extension,flux:s.flux,aliases:s.aliases})}`;
+  $('source-details').innerHTML=renderSourceInfo(s);
   $('source-dialog').showModal();
 }
 function renderConditions(){
@@ -135,6 +181,7 @@ function renderConditions(){
   $('year').value=S.year;
 }
 function setRoute(route){
+  if(route==='night'&&fermiRecoveryPending){route='overview';toast('Fermi 源库暂未载入。为保留原有草稿，请先打开“Fermi 扩展源库”重试，再进行排班。');}
   if(atlas.expanded&&route==='night')expandAtlas(false);
   S.route=route==='night'?'night':'overview';
   $('overview-page').hidden=S.route!=='overview';$('night-page').hidden=S.route!=='night';
@@ -168,7 +215,7 @@ function renderOverview(){
   const pageItems=items.slice(S.page*S.perPage,(S.page+1)*S.perPage);
   $('source-body').innerHTML=pageItems.map(s=>{
     const monthly=S.annual?.monthly[s.id],p=priority(s.id),recordStatus=['candidate','disputed','private'].includes(s.status)?' · '+statusNames[s.status]:'';
-    return `<tr><td><div class="source-name-cell"><button class="priority-button ${p?'marked':''}" data-priority="${esc(s.id)}" aria-label="${esc(s.name)} 优先级 ${p}，点击切换">${p?'★':'☆'}${p>1?'<small style="font-size:9px">'+p+'</small>':''}</button><button class="source-name" data-open-month="${esc(s.id)}"><strong>${esc(s.name)}</strong><span>${esc(s.catalog)} · ${esc(s.type||'未分类')}${recordStatus}</span></button></div></td>`+Array.from({length:12},(_,m)=>`<td>${monthly?`<button class="heat-cell ${monthly[m]<.05?'zero':''} ${s.id===S.focus&&m===S.month?'selected':''}" data-cell-source="${esc(s.id)}" data-cell-month="${m}" style="--v:${Math.min(240,monthly[m]/maximum*240).toFixed(1)}" aria-label="${esc(s.name)} ${m+1}月，可观测 ${monthly[m].toFixed(1)} 小时">${monthly[m]<.05?'·':Math.round(monthly[m])}</button>`:'<span class="skeleton-number" aria-label="计算中"></span>'}</td>`).join('')+`<td class="year-total">${monthly?Math.round(sum(monthly)):'—'}</td></tr>`;
+    return `<tr><td><div class="source-name-cell"><button class="priority-button ${p?'marked':''}" data-priority="${esc(s.id)}" aria-label="${esc(s.name)} 优先级 ${p}，点击切换">${p?'★':'☆'}${p>1?'<small style="font-size:9px">'+p+'</small>':''}</button><button class="source-name" data-open-month="${esc(s.id)}"><strong>${esc(s.name)}</strong><span>${esc(s.catalog)} · ${esc(s.type||'未分类')}${recordStatus}</span></button><button class="source-info-shortcut" data-atlas-info="${esc(s.id)}" aria-label="查看 ${esc(s.name)} 的源表信息" title="源表信息">ⓘ</button></div></td>`+Array.from({length:12},(_,m)=>`<td>${monthly?`<button class="heat-cell ${monthly[m]<.05?'zero':''} ${s.id===S.focus&&m===S.month?'selected':''}" data-cell-source="${esc(s.id)}" data-cell-month="${m}" style="--v:${Math.min(240,monthly[m]/maximum*240).toFixed(1)}" aria-label="${esc(s.name)} ${m+1}月，可观测 ${monthly[m].toFixed(1)} 小时">${monthly[m]<.05?'·':Math.round(monthly[m])}</button>`:'<span class="skeleton-number" aria-label="计算中"></span>'}</td>`).join('')+`<td class="year-total">${monthly?Math.round(sum(monthly)):'—'}</td></tr>`;
   }).join('')||'<tr><td colspan="14"><div class="empty-state">没有匹配的源。试试缩短关键词或调整筛选。</div></td></tr>';
   $('table-summary').textContent=items.length?`${S.page*S.perPage+1}–${Math.min(items.length,(S.page+1)*S.perPage)} / ${items.length} 条 · 点击月份查看逐夜窗口`:'0 条匹配记录';
   $('page-number').textContent=`${S.page+1} / ${pages}`;$('prev-page').disabled=S.page===0;$('next-page').disabled=S.page===pages-1;
@@ -199,13 +246,14 @@ function drawAtlasMap(items=filteredSources()){
   $('atlas-fov-radius').value=S.config.fov;
   $('atlas-fov-size').textContent=`直径 ${+(S.config.fov*2).toFixed(3)}° · 与单夜视场共用设置`;
   $('atlas-center-fov').disabled=!source(atlas.inspected);
-  $('atlas-legend').innerHTML=atlas.colorBy==='month'&&!classic?'<span>月度可观测 / h</span><span>0</span><i class="atlas-hours-scale"></i><span>≥ 240</span><span class="atlas-missing-key">灰色：待计算</span>':'<span><i class="atlas-key tev"></i>TeVCat</span><span><i class="atlas-key lhaaso"></i>LHAASO</span><span class="atlas-missing-key">圆点表示目录位置</span>';
+  $('atlas-legend').innerHTML=atlas.colorBy==='month'&&!classic?'<span>月度可观测 / h</span><span>0</span><i class="atlas-hours-scale"></i><span>≥ 240</span><span class="atlas-missing-key">灰色：待计算</span>':'<span><i class="atlas-key tev"></i>TeVCat</span><span><i class="atlas-key lhaaso"></i>LHAASO</span><span><i class="atlas-key fermi"></i>Fermi（已选）</span><span class="atlas-missing-key">圆点表示目录位置</span>';
 }
 function renderAtlasDetail(){
   const s=source(atlas.inspected);
   if(!s){$('atlas-detail').innerHTML='<span class="eyebrow">SOURCE INSPECTOR</span><h3>选择一个天区目标</h3><p>源列表与上方搜索、目录筛选和排序同步。</p>';return;}
   const monthly=S.annual?.monthly[s.id],g=equatorialToGalactic(s.ra,s.dec),max=Math.max(1,...(monthly||[]));
-  $('atlas-detail').innerHTML=`<div class="atlas-detail-top"><span class="eyebrow">SOURCE INSPECTOR</span><span class="atlas-catalog-tag">${esc(s.catalog)}${s.private?' · 本地':''}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.type||'未分类')}${priority(s.id)?' · '+'★'.repeat(priority(s.id)):''}</p><dl class="atlas-coordinates"><div><dt>RA / Dec</dt><dd>${s.ra.toFixed(3)}° / ${s.dec.toFixed(3)}°</dd></div><div><dt>l / b</dt><dd>${g.l.toFixed(3)}° / ${g.b.toFixed(3)}°</dd></div></dl><div class="atlas-window-values"><div><span>${S.year} 年 ${S.month+1} 月</span><strong>${monthly?monthly[S.month].toFixed(1):'—'}<small> h</small></strong></div><div><span>全年可用</span><strong>${monthly?Math.round(sum(monthly)):'—'}<small> h</small></strong></div></div><div class="atlas-month-bars" aria-label="该源十二个月可观测时长">${Array.from({length:12},(_,m)=>`<button type="button" data-cell-source="${esc(s.id)}" data-cell-month="${m}" aria-label="${esc(s.name)} ${m+1}月 ${monthly?monthly[m].toFixed(1)+'小时':'待计算'}，查看逐夜窗口" title="${m+1}月 · ${monthly?monthly[m].toFixed(1)+' h':'待计算'}"><span style="height:${monthly?Math.max(2,monthly[m]/max*40):2}px" class="${m===S.month?'selected':''}"></span><small>${m+1}</small></button>`).join('')}</div><div class="atlas-detail-actions"><button type="button" class="primary-button" data-atlas-open="${esc(s.id)}">单夜规划 →</button><button type="button" class="text-button" data-atlas-info="${esc(s.id)}">源表信息</button></div><p class="atlas-note">${s.private?'FK5 / J2000':'ICRS'} · 目录坐标；时长使用当前观测条件。</p>`;
+  $('atlas-detail').innerHTML=`<div class="atlas-detail-top"><span class="eyebrow">SOURCE INSPECTOR</span><span class="atlas-catalog-tag">${esc(s.catalog)}${s.private?' · 本地':''}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.type||'未分类')}${priority(s.id)?' · '+'★'.repeat(priority(s.id)):''}</p><dl class="atlas-coordinates"><div><dt>RA / Dec</dt><dd>${s.ra.toFixed(3)}° / ${s.dec.toFixed(3)}°</dd></div><div><dt>l / b</dt><dd>${g.l.toFixed(3)}° / ${g.b.toFixed(3)}°</dd></div></dl><div class="atlas-window-values"><div><span>${S.year} 年 ${S.month+1} 月</span><strong>${monthly?monthly[S.month].toFixed(1):'—'}<small> h</small></strong></div><div><span>全年可用</span><strong>${monthly?Math.round(sum(monthly)):'—'}<small> h</small></strong></div></div><div class="atlas-month-bars" aria-label="该源十二个月可观测时长">${Array.from({length:12},(_,m)=>`<button type="button" data-cell-source="${esc(s.id)}" data-cell-month="${m}" aria-label="${esc(s.name)} ${m+1}月 ${monthly?monthly[m].toFixed(1)+'小时':'待计算'}，查看逐夜窗口" title="${m+1}月 · ${monthly?monthly[m].toFixed(1)+' h':'待计算'}"><span style="height:${monthly?Math.max(2,monthly[m]/max*40):2}px" class="${m===S.month?'selected':''}"></span><small>${m+1}</small></button>`).join('')}</div><div class="atlas-detail-actions"><button type="button" class="primary-button" data-atlas-open="${esc(s.id)}">单夜规划 →</button><button type="button" class="text-button" data-atlas-info="${esc(s.id)}">源表信息</button></div><p class="atlas-note">${sourceFrame(s)} · 目录坐标；时长使用当前观测条件。</p>`;
+  $('atlas-detail').querySelector('.atlas-coordinates').insertAdjacentHTML('beforebegin',`<p class="atlas-source-context">${esc(sourceSummary(s))}</p>`);
   if(atlas.mode==='atlas'&&atlas.showFov){
     const inside=S.sources.map(item=>({item,distance:separation(s,item)})).filter(entry=>entry.distance<=S.config.fov+1e-9).sort((a,b)=>a.distance-b.distance);
     $('atlas-detail').insertAdjacentHTML('beforeend',`<div class="atlas-field-summary"><strong><i class="atlas-region-key fov"></i> 当前预览源的视场</strong><span>半径 ${S.config.fov}° · 直径 ${+(2*S.config.fov).toFixed(3)}°</span><details><summary>包含 ${inside.length} 条目录记录 · 查看</summary><div class="atlas-field-sources">${inside.map(({item,distance})=>`<button type="button" data-atlas-info="${esc(item.id)}" title="查看 ${esc(item.name)} · ${esc(item.catalog)}；距视场中心 ${distance.toFixed(2)}°"><span>${esc(item.name)}</span><small>${distance.toFixed(2)}°</small></button>`).join('')}</div></details><p>按全部已载入目录的源中心判断，含当前源；跨目录可能重复。延展源不一定完全落在视场内。</p></div>`);
@@ -322,9 +370,9 @@ function loadDate(date){
   if(!M.validDate(date)||Number(date.slice(0,4))<2000||Number(date.slice(0,4))>2100){toast('请选择 2000–2100 年之间的有效日期。');$('night-date').value=S.date;return;}
   if(date===S.date)return;
   savePlan();S.date=date;S.history=[];S.blocks=[];S.selected=null;S.revision=1;
-  const oldConfig=JSON.stringify(S.config);
+  const oldConfig=JSON.stringify(S.config),oldSourceCount=S.sources.length;
   if(plans[date]){try{const p=restoreCatalogPlan(plans[date]);restoreSnapshot(p);S.revision=Number(plans[date].revision)||1;}catch{toast('这晚的本地草稿无法读取，已打开空计划。');}}
-  if(JSON.stringify(S.config)!==oldConfig){savePreferences();renderConditions();calculateAnnual();toast('已恢复这晚草稿保存的观测参数。');}
+  if(JSON.stringify(S.config)!==oldConfig||S.sources.length!==oldSourceCount){savePreferences();renderCatalogState();renderConditions();calculateAnnual();toast('已恢复这晚草稿保存的源与观测参数。');}
   S.nextId=Math.max(0,...S.blocks.map(b=>b.id))+1;S.selected=S.blocks[0]?.id??null;invalidateNight();renderNight();
 }
 function restoreSnapshot(p){
@@ -396,7 +444,7 @@ function renderNight(){
   try{ensureNight();}catch(error){$('night-status').textContent='计算失败：'+error.message;toast(error.message);return;}
   const c=nightConfig(),f=source(S.focus);assessment=M.validate(S.night,S.blocks,c);
   $('night-date').value=S.date;$('draft-state').textContent=`草稿 v${S.revision} · 本机保存`;
-  $('focus-name').textContent=f.name;$('focus-coordinates').textContent=`${f.catalog} · ${f.type}　 RA ${f.ra.toFixed(4)}° / Dec ${f.dec.toFixed(4)}° · ${f.private?'FK5 / J2000':'ICRS'}`;
+  $('focus-name').textContent=f.name;$('focus-coordinates').textContent=`${f.catalog} · ${f.type}　 RA ${f.ra.toFixed(4)}° / Dec ${f.dec.toFixed(4)}° · ${sourceFrame(f)}`;
   $('night-status').textContent='几何轨迹 · 1 min 步长';
   const [a,b]=M.nightBounds(S.night,c);
   const eventTime=t=>Number.isFinite(t)?M.clock(t,c):'无此事件';
@@ -467,8 +515,8 @@ function openSettings(){
   $('settings-dialog').showModal();
 }
 function download(name,text,type){const url=URL.createObjectURL(new Blob([type.startsWith('text/csv')?'\ufeff':'',text],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function fullPlan(){return {...snapshot(),confidentiality:privateCatalog?'PRIVATE_CATALOG':'PUBLIC_CATALOG',kind:'geometric_planning_not_controller_commands',revision:S.revision,createdAt:new Date().toISOString(),catalogRetrievedAt:S.meta.retrievedAt,resource:'LACT synchronized array / one pointing',tracking:{mode:privateCatalog?'CATALOG_SOURCE_CENTER':'ICRS_SOURCE_CENTER',azimuth:'north=0 east=90 degrees',refraction:false,samplingMinutes:10},deviceValidation:'NOT_IMPLEMENTED',sources:[...new Set(S.blocks.map(b=>b.source))].map(id=>{const s=source(id);return {id,name:s.name,ra:s.ra,dec:s.dec,catalog:s.catalog,reference:s.reference,coordinateFrame:s.coordinateFrame||'ICRS',coordinateNote:s.coordinateNote,coordinateComponent:s.coordinateComponent};})};}
-function taskRows(){return assessment.sorted.map(b=>({task:b.id,source_id:b.source,source:source(b.source).name,start_utc:M.utc(S.date,b.start,nightConfig()),end_utc_exclusive:M.utc(S.date,b.start+b.duration,nightConfig()),start_local:M.local(S.date,b.start,nightConfig()),end_local_exclusive:M.local(S.date,b.start+b.duration,nightConfig()),duration_min:b.duration,...M.coordinateColumns(source(b.source)),mode:privateCatalog?'CATALOG_SOURCE_CENTER':'ICRS_SOURCE_CENTER'}));}
+function fullPlan(){return {...snapshot(),confidentiality:privateCatalog?'PRIVATE_CATALOG':'PUBLIC_CATALOG',kind:'geometric_planning_not_controller_commands',revision:S.revision,createdAt:new Date().toISOString(),catalogRetrievedAt:S.meta.retrievedAt,fermiCatalog:S.blocks.some(b=>isFermiId(b.source))?{id:'4FGL-DR4',version:fermi.meta?.version,sha256:fermi.meta?.sha256,sourceUrl:fermi.meta?.sourceUrl,retrievedAt:fermi.meta?.retrievedAt}:undefined,resource:'LACT synchronized array / one pointing',tracking:{mode:S.blocks.some(b=>sourceFrame(source(b.source))!=='ICRS')?'CATALOG_SOURCE_CENTER':'ICRS_SOURCE_CENTER',azimuth:'north=0 east=90 degrees',refraction:false,samplingMinutes:10},deviceValidation:'NOT_IMPLEMENTED',sources:[...new Set(S.blocks.map(b=>b.source))].map(id=>{const s=source(id);return {id,name:s.name,ra:s.ra,dec:s.dec,catalog:s.catalog,reference:s.reference,coordinateFrame:s.coordinateFrame||'ICRS',coordinateNote:s.coordinateNote,coordinateComponent:s.coordinateComponent};})};}
+function taskRows(){return assessment.sorted.map(b=>({task:b.id,source_id:b.source,source:source(b.source).name,start_utc:M.utc(S.date,b.start,nightConfig()),end_utc_exclusive:M.utc(S.date,b.start+b.duration,nightConfig()),start_local:M.local(S.date,b.start,nightConfig()),end_local_exclusive:M.local(S.date,b.start+b.duration,nightConfig()),duration_min:b.duration,...M.coordinateColumns(source(b.source)),mode:sourceFrame(source(b.source))!=='ICRS'?'CATALOG_SOURCE_CENTER':'ICRS_SOURCE_CENTER'}));}
 function openReview(){
   ensureNight();assessment=M.validate(S.night,S.blocks,nightConfig());if(!S.blocks.length||assessment.issues.length){toast('请先安排任务并解决所有冲突。');return;}
   $('review-confirm').checked=false;document.querySelectorAll('[data-export]').forEach(b=>b.disabled=true);
@@ -506,6 +554,7 @@ function bindEvents(){
   $('source-info-button').onclick=()=>sourceDetails(S.focus);$('month-source-info').onclick=()=>sourceDetails(S.monthSource);
   document.addEventListener('click',event=>{
     const b=event.target.closest('button');if(!b)return;
+    if(b.dataset.openFermi!==undefined){if(atlas.expanded)expandAtlas(false);openFermiLibrary();return;}
     if(b.dataset.close!==undefined){b.closest('dialog').close();return;}
     if(b.dataset.route){setRoute(b.dataset.route);return;}
     if(b.dataset.action==='settings'){openSettings();return;}
@@ -650,7 +699,7 @@ function bindEvents(){
   $('import-plan').onclick=()=>$('plan-file').click();
   $('plan-file').onchange=async event=>{
     const file=event.target.files[0];if(!file)return;
-    try {if(file.size>2000000)throw new Error('计划文件不能超过 2 MB');const plan=restoreCatalogPlan(await file.text());if(plan.config.startHour!==18)throw new Error('本站单夜工作台仅支持18:00起始的计划');if(+plan.date.slice(0,4)<2000||+plan.date.slice(0,4)>2100)throw new Error('计划年份需在2000–2100范围内');savePlan();Object.assign(S,{date:plan.date,blocks:plan.blocks,focus:plan.focus,visible:plan.visible.slice(0,6),config:{...plan.config,mode:S.config.mode,defaultDuration:S.config.defaultDuration},history:[],revision:1,selected:plan.blocks[0]?.id??null,nextId:Math.max(0,...plan.blocks.map(b=>b.id))+1});if(!S.visible.includes(S.focus))S.visible=[S.focus,...S.visible].slice(0,6);invalidateNight();savePreferences();savePlan();renderConditions();calculateAnnual();setRoute('night');toast('计划已导入并按当前目录重新检查。');}catch(error){toast('导入失败：'+error.message);}event.target.value='';
+    try {if(file.size>2000000)throw new Error('计划文件不能超过 2 MB');const payload=JSON.parse(await file.text());checkPlanCatalogIdentity(payload,privateCatalog?privateFingerprint:'');if(planFermiIds(payload).length)await fermi.load();const plan=restoreCatalogPlan(payload);savePlan();fermiRecoveryPending=false;Object.assign(S,{date:plan.date,blocks:plan.blocks,focus:plan.focus,visible:plan.visible.slice(0,6),config:{...plan.config,mode:S.config.mode,defaultDuration:S.config.defaultDuration},history:[],revision:1,selected:plan.blocks[0]?.id??null,nextId:Math.max(0,...plan.blocks.map(b=>b.id))+1});if(!S.visible.includes(S.focus))S.visible=[S.focus,...S.visible].slice(0,6);invalidateNight();savePreferences();savePlan();renderCatalogState();renderConditions();calculateAnnual();setRoute('night');toast('计划已导入并按当前目录重新检查。');}catch(error){toast('导入失败：'+error.message);}event.target.value='';
   };
   const track=$('schedule-track');
   $('candidates').ondragstart=event=>{const el=event.target.closest('[data-drag-source]');if(!el)return;event.dataTransfer.setData('text/plain',el.dataset.dragSource);event.dataTransfer.effectAllowed='copy';};
@@ -671,7 +720,11 @@ async function boot(){
     publicCatalog=catalog;let local=null,fingerprint='';
     try{const stored=await localCatalog('read');if(stored&&(!clearEpoch()||stored.savedAt>clearEpoch())){local=parsePrivateCatalog(stored.text,stored.filename);fingerprint=await catalogFingerprint(stored.text);if(clearEpoch()&&!(stored.savedAt>clearEpoch())){local=null;fingerprint='';}}}
     catch{local=null;toast('本机私有目录未能载入，现使用公开目录；可在“管理源表”重新导入。');}
+    if(fermiIds.size||savedPlanSets().some(set=>Object.values(set).some(p=>planFermiIds(p).length))){
+      try{await fermi.load();for(const id of fermiIds)if(!fermi.getById(id))fermiIds.delete(id);}catch{fermiRecoveryPending=true;}
+    }
     bindEvents();activateCatalog(local,fingerprint,!!local,{initial:true});$('boot').hidden=true;$('catalog-bar').hidden=false;setRoute(location.hash==='#night'?'night':'overview');calculateAnnual();
+    if(fermiRecoveryPending)toast('Fermi 扩展源库暂未载入，基础源表可继续查询。原草稿已保护，请打开 Fermi 源库重试后继续排班。');
   }catch(error){$('boot').innerHTML='<h1>暂时无法打开观测源表</h1><p>'+esc(error.message)+'</p><button class="primary-button" id="reload-app">重新载入</button>';$('reload-app').onclick=()=>location.reload();}
 }
 boot();
