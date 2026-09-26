@@ -161,7 +161,7 @@ export function renderAtlas(svg, sources, selectedId, options = {}) {
         grid.reachPath = regionPath(grid, (_x, _y, z) => z >= low && z <= high);
         grid.reachKey = key;
       }
-      html += `<path data-atlas-layer="reach-fill" d="${grid.reachPath}" fill="#268b83" fill-opacity=".09" pointer-events="none"><title>站址几何可达天区：赤纬 ${reach.min.toFixed(1)}° 至 ${reach.max.toFixed(1)}°；仅天顶角条件</title></path>`;
+      html += `<path data-atlas-layer="reach-fill" d="${grid.reachPath}" fill="#268b83" fill-opacity=".09" pointer-events="none"><title>可观测天区（每日过境范围）：赤纬 ${reach.min.toFixed(1)}° 至 ${reach.max.toFixed(1)}°；仅天顶角条件</title></path>`;
     }
     if (focus) {
       const key = `${focus.ra},${focus.dec},${config.fov}`;
@@ -198,7 +198,7 @@ export function renderAtlas(svg, sources, selectedId, options = {}) {
   if (reach) {
     for (const dec of [reach.min, reach.max].filter(d => d > -90 && d < 90)) {
       const points = Array.from({ length: 721 }, (_, i) => ({ ra: i / 2, dec }));
-      html += `<path data-atlas-layer="reach" d="${skyPath(points)}" fill="none" stroke="#268b83" stroke-width="1.2" stroke-opacity=".65" stroke-dasharray="3 5"><title>几何可达边界 δ=${dec.toFixed(1)}°；仅天顶角条件，不含太阳、月亮与日期</title></path>`;
+      html += `<path data-atlas-layer="reach" d="${skyPath(points)}" fill="none" stroke="#268b83" stroke-width="1.2" stroke-opacity=".65" stroke-dasharray="3 5"><title>可观测天区边界 δ=${dec.toFixed(1)}°；每日过境范围，仅天顶角条件，不含太阳、月亮与日期</title></path>`;
     }
   }
   if (focus) html += `<path data-atlas-layer="fov" d="${skyPath(fovBoundary(focus, config.fov))}" fill="none" stroke="#426bc2" stroke-width="1.5" stroke-dasharray="5 3" pointer-events="none"><title>${esc(focus.name ?? focus.id)} 为指向中心，视场半径 ${config.fov}°（直径 ${2 * config.fov}°）；表示角范围，不含接收效率</title></path>`;

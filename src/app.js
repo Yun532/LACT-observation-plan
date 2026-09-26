@@ -241,12 +241,13 @@ function drawAtlasMap(items=filteredSources()){
   $('atlas-hint').textContent=classic?'经典 1.0 · 目录赤道坐标，赤经向左增加；等距经纬图，不表示等立体角。点击源进入单夜工作台。':'Mollweide 等面积投影 · 滚轮 / 双指缩放，放大后拖动 · + / − 与方向键可操作，Home 复位。';
   $('atlas-science-note').hidden=classic;
   const range=reachDeclinationRange(S.config),signed=n=>(n>=0?'+':'')+n.toFixed(2)+'°';
-  $('atlas-reach-range').textContent=range?`可达赤纬 ${signed(range.min)} 至 ${signed(range.max)}`:'';
-  $('atlas-reach-explanation').textContent=`浅绿色区域表示天体在上中天（一天中位置最高）时能满足天顶角限制的天区；虚线是它的边界。最低天顶角 z = |赤纬 − 台站纬度|。当前台站纬度 ${signed(S.config.latitude)}，天顶角上限 ${S.config.zmax}°；区域覆盖上述赤纬范围内的全部赤经，并非此刻同时可见的天空。`;
+  $('atlas-reach-range').textContent=range?`每日过境范围 · 赤纬 ${signed(range.min)} 至 ${signed(range.max)}`:'';
+  $('atlas-reach-explanation').textContent=`浅绿色区域表示天体在上中天（一天中位置最高）时能满足天顶角限制的天区；虚线是它的边界。最低天顶角 z = |赤纬 − 台站纬度|。当前台站纬度 ${signed(S.config.latitude)}，经度 ${signed(S.config.longitude)}（东经为正），天顶角上限 ${S.config.zmax}°。纬度决定这一全天范围；经度影响过境时刻，不改变每日过境的总范围。区域覆盖上述赤纬范围内的全部赤经，并非此刻同时可见的天空。`;
   $('atlas-fov-radius').value=S.config.fov;
   $('atlas-fov-size').textContent=`直径 ${+(S.config.fov*2).toFixed(3)}° · 与单夜视场共用设置`;
   $('atlas-center-fov').disabled=!source(atlas.inspected);
   $('atlas-legend').innerHTML=atlas.colorBy==='month'&&!classic?'<span>月度可观测 / h</span><span>0</span><i class="atlas-hours-scale"></i><span>≥ 240</span><span class="atlas-missing-key">灰色：待计算</span>':'<span><i class="atlas-key tev"></i>TeVCat</span><span><i class="atlas-key lhaaso"></i>LHAASO</span><span><i class="atlas-key fermi"></i>Fermi（已选）</span><span class="atlas-missing-key">圆点表示目录位置</span>';
+  if(!classic)$('atlas-legend').insertAdjacentHTML('beforeend',(atlas.showReach?'<span title="每日过境时满足天顶角条件的范围"><i class="atlas-region-key reach" aria-hidden="true"></i>可观测天区</span>':'')+(atlas.showFov&&source(atlas.inspected)?'<span><i class="atlas-region-key fov" aria-hidden="true"></i>目标视场</span>':''));
 }
 function renderAtlasDetail(){
   const s=source(atlas.inspected);
@@ -256,7 +257,7 @@ function renderAtlasDetail(){
   $('atlas-detail').querySelector('.atlas-coordinates').insertAdjacentHTML('beforebegin',`<p class="atlas-source-context">${esc(sourceSummary(s))}</p>`);
   if(atlas.mode==='atlas'&&atlas.showFov){
     const inside=S.sources.map(item=>({item,distance:separation(s,item)})).filter(entry=>entry.distance<=S.config.fov+1e-9).sort((a,b)=>a.distance-b.distance);
-    $('atlas-detail').insertAdjacentHTML('beforeend',`<div class="atlas-field-summary"><strong><i class="atlas-region-key fov"></i> 当前预览源的视场</strong><span>半径 ${S.config.fov}° · 直径 ${+(2*S.config.fov).toFixed(3)}°</span><details><summary>包含 ${inside.length} 条目录记录 · 查看</summary><div class="atlas-field-sources">${inside.map(({item,distance})=>`<button type="button" data-atlas-info="${esc(item.id)}" title="查看 ${esc(item.name)} · ${esc(item.catalog)}；距视场中心 ${distance.toFixed(2)}°"><span>${esc(item.name)}</span><small>${distance.toFixed(2)}°</small></button>`).join('')}</div></details><p>按全部已载入目录的源中心判断，含当前源；跨目录可能重复。延展源不一定完全落在视场内。</p></div>`);
+    $('atlas-detail').insertAdjacentHTML('beforeend',`<div class="atlas-field-summary"><strong>当前预览源的视场</strong><span>半径 ${S.config.fov}° · 直径 ${+(2*S.config.fov).toFixed(3)}°</span><details><summary>包含 ${inside.length} 条目录记录 · 查看</summary><div class="atlas-field-sources">${inside.map(({item,distance})=>`<button type="button" data-atlas-info="${esc(item.id)}" title="查看 ${esc(item.name)} · ${esc(item.catalog)}；距视场中心 ${distance.toFixed(2)}°"><span>${esc(item.name)}</span><small>${distance.toFixed(2)}°</small></button>`).join('')}</div></details><p>按全部已载入目录的源中心判断，含当前源；跨目录可能重复。延展源不一定完全落在视场内。</p></div>`);
   }
 }
 function renderAtlasView(items=filteredSources()){

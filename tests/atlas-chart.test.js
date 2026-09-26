@@ -86,7 +86,7 @@ test('renderer preserves fixed marker sizes and moves hits with the navigation v
   assert.equal(initial.hits[0].r, zoomed.hits[0].r);
   assert.equal(zoomed.maxHours, 240);
   assert.ok(!svg.innerHTML.includes('NaN') && !svg.innerHTML.includes('Infinity'));
-  assert.match(svg.innerHTML, /几何可达边界/);
+  assert.match(svg.innerHTML, /可观测天区边界/);
   assert.match(svg.innerHTML, /坐标参考标记，非恒星/);
 });
 
