@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { equatorialToGalactic, galacticToEquatorial, projectAtlas, unprojectAtlas, atlasHourColor, renderAtlas, limitAtlasView } from '../src/atlas-chart.js';
+import { equatorialToGalactic, galacticToEquatorial, projectAtlas, unprojectAtlas, atlasHourColor, renderAtlas, limitAtlasView, reachDeclinationRange, inAtlasFov } from '../src/atlas-chart.js';
 
 const close = (a, b, tol = 1e-7) => assert.ok(Math.abs(a - b) < tol, `${a} differs from ${b}`);
 const angle = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
@@ -114,4 +114,101 @@ test('plane and reach curves split the Mollweide longitude seam', () => {
   renderAtlas(svg, [], null, { frame: 'galactic' });
   const plane = svg.innerHTML.match(/data-atlas-layer="plane" d="([^"]+)"/)[1];
   assert.ok((plane.match(/M/g) || []).length >= 2, 'The Galactic plane must break at l=180');
+});
+
+test('geometric reach uses latitude and zenith limit, and FOV uses a true angular radius', () => {
+  const reach = reachDeclinationRange({ latitude: 29.3586, zmax: 70 });
+  close(reach.min, -40.6414); assert.equal(reach.max, 90);
+  assert.deepEqual(reachDeclinationRange({ latitude: -70, zmax: 30 }), { min: -90, max: -40 });
+  assert.equal(reachDeclinationRange({ latitude: 29 }), null);
+  assert.equal(reachDeclinationRange({ latitude: 91, zmax: 70 }), null);
+  assert.equal(inAtlasFov(1, 0, { ra: 359, dec: 0 }, 3), true);
+  assert.equal(inAtlasFov(2, 0, { ra: 359, dec: 0 }, 3), true);
+  assert.equal(inAtlasFov(2.001, 0, { ra: 359, dec: 0 }, 3), false);
+  for (const ra of [0, 90, 180, 270]) {
+    assert.equal(inAtlasFov(ra, 82, { ra: 200, dec: 90 }, 8), true);
+    assert.equal(inAtlasFov(ra, 81.99, { ra: 200, dec: 90 }, 8), false);
+  }
+  assert.equal(inAtlasFov(NaN, 0, { ra: 0, dec: 0 }, 3), false);
+});
+
+const layerPath = (svg, name) => svg.innerHTML.match(new RegExp(`data-atlas-layer="${name}" d="([^"]*)"`))?.[1];
+const rectangles = path => [...(path || '').matchAll(/M([\d.]+) ([\d.]+)h([\d.]+)v([\d.]+)h-[\d.]+Z/g)].map(m => m.slice(1).map(Number));
+const covered = (rects, x, y) => rects.some(([rx, ry, w, h]) => x >= rx && x < rx + w && y >= ry && y < ry + h);
+const angularDistance = (a, b) => {
+  const d = Math.PI / 180, hav = Math.sin((a.dec - b.dec) * d / 2) ** 2 + Math.cos(a.dec * d) * Math.cos(b.dec * d) * Math.sin((a.ra - b.ra) * d / 2) ** 2;
+  return 2 * Math.asin(Math.sqrt(Math.min(1, hav))) / d;
+};
+
+test('region shading matches the visible sky in either coordinate frame, including seams, poles and zoom', () => {
+  const galSeam = galacticToEquatorial(179, 25);
+  for (const frame of ['equatorial', 'galactic']) for (const target of [source('seam', 359, 0), source('pole', 30, 88), source('gal-seam', galSeam.ra, galSeam.dec)]) {
+    const svg = mockSvg();
+    for (const zoom of [1, 12]) {
+      const view = zoom === 1 ? { zoom, x: 0, y: 0 } : { zoom, ...projectAtlas(target.ra, target.dec, frame) };
+      const config = { latitude: 29.3586, zmax: 70, fov: 12 };
+      const result = renderAtlas(svg, [target], target.id, { frame, view, config });
+      const reachRects = rectangles(layerPath(svg, 'reach-fill')), fovRects = rectangles(layerPath(svg, 'fov-fill'));
+      assert.ok(reachRects.length > 0 && fovRects.length > 0);
+      const v = result.viewport, scale = v.baseRadius * zoom;
+      let inside = 0;
+      // Sample the actual rendered cell centers, independently invert them, and
+      // compare with angular geometry rather than projected Euclidean distance.
+      for (let y = 27; y < v.height - 24; y += 14) for (let x = 2; x < v.width - 1; x += 16) {
+        const sky = unprojectAtlas((x - v.centerX) / scale + view.x, (y - v.centerY) / scale + view.y, frame);
+        if (!sky) continue;
+        assert.equal(covered(reachRects, x, y), sky.dec >= -40.6414 && sky.dec <= 90);
+        const inFov = angularDistance(sky, target) <= config.fov;
+        assert.equal(covered(fovRects, x, y), inFov, `${frame}, ${target.id}, zoom ${zoom}, x ${x}, y ${y}`);
+        inside += Number(inFov);
+      }
+      assert.ok(inside > 0);
+      // Path size depends on visible rows, not the magnified all-sky area.
+      assert.ok(reachRects.length <= v.height * 2 && fovRects.length <= v.height * 2);
+      assert.ok(!svg.innerHTML.includes('NaN') && !svg.innerHTML.includes('Infinity'));
+    }
+  }
+});
+
+test('FOV outlines follow a spherical circle and split seams without a closing chord', () => {
+  for (const [frame, target] of [['equatorial', source('seam', 359, 0)], ['galactic', { ...source('seam', 0), ...galacticToEquatorial(179, 0) }], ['equatorial', source('pole', 25, 90)]]) {
+    const svg = mockSvg(), result = renderAtlas(svg, [target], target.id, { frame, config: { fov: 8 } });
+    const path = layerPath(svg, 'fov'), v = result.viewport;
+    assert.ok((path.match(/M/g) || []).length >= 2);
+    assert.ok(!path.includes('Z'), 'Never join separate seam segments with a straight closing chord');
+    for (const point of path.matchAll(/[ML]([-\d.]+) ([-\d.]+)/g)) {
+      const sky = unprojectAtlas((Number(point[1]) - v.centerX) / v.baseRadius, (Number(point[2]) - v.centerY) / v.baseRadius, frame);
+      if (sky) close(angularDistance(sky, target), 8, .01); // SVG coordinates round to .01 px.
+    }
+  }
+});
+
+test('region toggles and cached view updates do not leave stale shading', () => {
+  const svg = mockSvg(), a = source('a', 170), b = source('b', 220), config = { latitude: 29, zmax: 70, fov: 8 };
+  renderAtlas(svg, [a, b], a.id, { config });
+  const first = layerPath(svg, 'fov-fill'), firstReach = layerPath(svg, 'reach-fill');
+  renderAtlas(svg, [a, b], b.id, { config });
+  assert.notEqual(layerPath(svg, 'fov-fill'), first);
+  assert.equal(layerPath(svg, 'reach-fill'), firstReach);
+  renderAtlas(svg, [a, b], b.id, { config: { ...config, zmax: 40, fov: 3 } });
+  assert.notEqual(layerPath(svg, 'reach-fill'), firstReach);
+  renderAtlas(svg, [a, b], a.id, { config, showFov: false, showReach: false });
+  assert.equal(layerPath(svg, 'fov-fill'), undefined);
+  assert.equal(layerPath(svg, 'fov'), undefined);
+  assert.equal(layerPath(svg, 'reach-fill'), undefined);
+  assert.equal(layerPath(svg, 'reach'), undefined);
+  renderAtlas(svg, [a], 'missing', { config });
+  assert.equal(layerPath(svg, 'fov-fill'), undefined);
+});
+
+test('changing selection preserves source tab order while drawing a noninteractive highlight above crowded markers', () => {
+  const svg = mockSvg(), sources = [source('first', 180), source('second', 180), source('last', 180)];
+  for (const selected of sources) {
+    renderAtlas(svg, sources, selected.id);
+    const interactive = [...svg.innerHTML.matchAll(/<circle[^>]*data-source="([^"]+)"[^>]*tabindex="0"[^>]*>/g)];
+    assert.deepEqual(interactive.map(match => match[1]), ['first', 'second', 'last']);
+    const decoration = svg.innerHTML.match(/<g aria-hidden="true" pointer-events="none">.*?<\/g>/);
+    assert.ok(decoration && decoration.index > interactive.at(-1).index);
+    assert.ok(!/tabindex|data-source|role="button"/.test(decoration[0]));
+  }
 });

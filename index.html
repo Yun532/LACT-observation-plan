@@ -30,13 +30,14 @@
         </div>
         <div class="atlas-layout">
           <div class="atlas-map-column">
-            <div class="atlas-layerbar atlas-enhanced-control"><label><input id="atlas-grid" type="checkbox" checked>坐标网格</label><label><input id="atlas-plane" type="checkbox" checked>银道 / 银心</label><label><input id="atlas-reach" type="checkbox" checked>站址过境边界</label><label><input id="atlas-labels" type="checkbox">源名称</label><button id="atlas-expand" type="button" class="text-button" aria-pressed="false">展开天图 ↗</button></div>
+            <div class="atlas-layerbar atlas-enhanced-control"><label><input id="atlas-grid" type="checkbox" checked>坐标网格</label><label><input id="atlas-plane" type="checkbox" checked>银道 / 银心</label><label><input id="atlas-reach" type="checkbox" checked><i class="atlas-region-key reach"></i>几何可达天区</label><label><input id="atlas-fov" type="checkbox" checked><i class="atlas-region-key fov"></i>目标视场</label><label><input id="atlas-labels" type="checkbox">源名称</label><button id="atlas-expand" type="button" class="text-button" aria-pressed="false">展开天图 ↗</button></div>
+            <div class="atlas-fov-controls atlas-enhanced-control"><label for="atlas-fov-radius">视场半径 <input id="atlas-fov-radius" type="number" min="0.05" max="30" step="any" value="3" aria-label="目标视场半径，单位度"> °</label><span id="atlas-fov-size">直径 6°</span><button id="atlas-center-fov" type="button" class="text-button">放大视场 ↗</button></div>
             <div class="atlas-stage"><svg id="atlas-sky" tabindex="0" role="group" aria-label="TeV 源全天投影" aria-describedby="atlas-hint"></svg><svg id="all-sky" hidden role="group" aria-label="全部目录源的赤经赤纬分布"></svg><div id="atlas-empty" class="atlas-empty" hidden>没有匹配源，请调整上方搜索或筛选。</div></div>
             <div class="atlas-map-footer"><div id="atlas-legend" class="atlas-legend"></div><div class="atlas-zoom atlas-enhanced-control" role="group" aria-label="全天图缩放"><button id="atlas-zoom-out" type="button" aria-label="缩小全天图">−</button><output id="atlas-zoom-value">1.0×</output><button id="atlas-zoom-in" type="button" aria-label="放大全天图">＋</button><button id="atlas-reset" type="button">恢复全天</button></div></div>
             <div id="atlas-readout" class="atlas-readout">悬停查看坐标与源信息；点击源进入单夜工作台。</div>
             <div id="atlas-picks" class="sky-picks" hidden aria-label="全天图重叠源候选"></div>
             <p id="atlas-hint" class="atlas-note">Mollweide 等面积投影 · 滚轮 / 双指缩放，放大后拖动 · + / − 与方向键可操作，Home 复位。</p>
-            <p id="atlas-science-note" class="atlas-note">虚线仅表示站址与天顶角限制对应的几何过境边界，不等于今晚可观测。当前为纯净坐标底图，未叠加任何波段强度。</p>
+            <details id="atlas-science-note" class="atlas-region-guide"><summary>这两种区域表示什么？<span id="atlas-reach-range"></span></summary><p id="atlas-reach-explanation"></p><p>蓝色区域以源信息卡中的当前预览源为中心，表示设置半径内的球面圆形视场；悬停源或在列表定位可切换中心。它是规划用的圆形近似，不表示相机精确边缘或均匀灵敏度。</p><p>可达天区没有计入暗夜、太阳与月亮限制；具体哪一晚、哪个时刻能观测，请进入单夜规划。底图未叠加波段强度。</p></details>
           </div>
           <aside class="atlas-sidebar" aria-label="天图源信息与列表"><div id="atlas-detail" class="atlas-detail"></div><div class="atlas-list-heading"><strong>天区源列表</strong><span id="atlas-list-caption"></span></div><div id="atlas-source-list" class="atlas-source-list"></div><button id="atlas-more" class="text-button" type="button">显示更多</button></aside>
         </div>

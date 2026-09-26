@@ -71,8 +71,74 @@ export function limitAtlasView(view) {
   return zoom===1?{zoom:1,x:0,y:0}:{zoom,x:view.x*factor,y:view.y*factor};
 }
 
+export function reachDeclinationRange(config) {
+  if (!Number.isFinite(config.latitude) || Math.abs(config.latitude) > 90 || !Number.isFinite(config.zmax) || config.zmax < 0) return null;
+  return { min: Math.max(-90, config.latitude - config.zmax), max: Math.min(90, config.latitude + config.zmax) };
+}
+const direction = (ra, dec) => [Math.cos(dec * D) * Math.cos(ra * D), Math.cos(dec * D) * Math.sin(ra * D), Math.sin(dec * D)];
+export function inAtlasFov(ra, dec, center, radius) {
+  if (![ra, dec, center?.ra, center?.dec, radius].every(Number.isFinite) || Math.abs(dec) > 90 || Math.abs(center.dec) > 90 || radius < 0 || radius > 180) return false;
+  const p = direction(ra, dec), q = direction(center.ra, center.dec);
+  return p.reduce((sum, value, i) => sum + value * q[i], 0) >= Math.cos(radius * D) - 1e-12;
+}
+function fovBoundary(center, radius) {
+  const p = direction(center.ra, center.dec), a = center.ra * D, d = center.dec * D;
+  const north = [-Math.sin(d) * Math.cos(a), -Math.sin(d) * Math.sin(a), Math.cos(d)], east = [-Math.sin(a), Math.cos(a), 0];
+  return Array.from({ length: 361 }, (_, i) => {
+    const b = i * D, v = p.map((value, j) => Math.cos(radius * D) * value + Math.sin(radius * D) * (Math.cos(b) * north[j] + Math.sin(b) * east[j]));
+    return { ra: wrap(Math.atan2(v[1], v[0]) / D), dec: Math.asin(clamp(v[2], -1, 1)) / D };
+  });
+}
+
+// Screen-space shading avoids closing a sky polygon across the map seam. Only
+// visible 2 px cells are sampled, so zooming never increases the work. The true
+// spherical outlines below retain sub-cell boundary detail. Reuse inverse sky
+// directions when hovering a different source in the same viewport.
+const regionCache = new WeakMap();
+function regionGrid(svg, width, height, center, radius, frame) {
+  const key = [width, height, center.x, center.y, radius, frame].join(',');
+  if (regionCache.get(svg)?.key === key) return regionCache.get(svg);
+  const step = 2, cols = Math.ceil((width - 2) / step), rows = [], vectors = new Float64Array(cols * Math.ceil((height - 50) / step) * 3);
+  for (let row = 0, y = 26; y < height - 24; row++, y += step) {
+    const py = (y + step / 2 - center.y) / radius;
+    if (Math.abs(py) >= .5) continue;
+    const theta = Math.asin(-2 * py), ct = Math.cos(theta), sz = (2 * theta + Math.sin(2 * theta)) / Math.PI, cz = Math.sqrt(Math.max(0, 1 - sz * sz));
+    const start = Math.max(0, Math.ceil((center.x - radius * ct - 1 - step / 2) / step));
+    const end = Math.min(cols, Math.floor((center.x + radius * ct - 1 - step / 2) / step) + 1);
+    rows.push({ y, start, end, offset: row * cols * 3 });
+    for (let col = start; col < end; col++) {
+      const lon = ((frame === 'galactic' ? 0 : 180) - 180 * (1 + col * step + step / 2 - center.x) / radius / ct) * D;
+      const x = cz * Math.cos(lon), y = cz * Math.sin(lon), offset = (row * cols + col) * 3;
+      if (frame === 'galactic') {
+        for (let j = 0; j < 3; j++) vectors[offset + j] = GAL[0][j] * x + GAL[1][j] * y + GAL[2][j] * sz;
+      } else {
+        vectors[offset] = x; vectors[offset + 1] = y; vectors[offset + 2] = sz;
+      }
+    }
+  }
+  const grid = { key, step, rows, vectors };
+  regionCache.set(svg, grid);
+  return grid;
+}
+function regionPath(grid, contains) {
+  let path = '';
+  for (const row of grid.rows) {
+    let start = -1;
+    for (let col = row.start; col <= row.end; col++) {
+      const offset = row.offset + col * 3, inside = col < row.end && contains(grid.vectors[offset], grid.vectors[offset + 1], grid.vectors[offset + 2]);
+      if (inside && start < 0) start = col;
+      if (!inside && start >= 0) {
+        const length = (col - start) * grid.step;
+        path += `M${1 + start * grid.step} ${row.y}h${length}v${grid.step}h-${length}Z`;
+        start = -1;
+      }
+    }
+  }
+  return path;
+}
+
 export function renderAtlas(svg, sources, selectedId, options = {}) {
-  const { frame = 'equatorial', showGrid = true, showPlane = true, showReach = true, showLabels = false, colorBy = 'catalog', month = 0, monthly = null, config = {}, view = {} } = options;
+  const { frame = 'equatorial', showGrid = true, showPlane = true, showReach = true, showFov = true, showLabels = false, colorBy = 'catalog', month = 0, monthly = null, config = {}, view = {} } = options;
   const width = Math.max(240, Math.round(svg.getBoundingClientRect().width || 900));
   const height = clamp(width * .52, 320, 520), baseRadius = Math.min((width - 62) / 2, height - 76);
   const centerX = width / 2, centerY = height / 2 + 2, zoom = clamp(view.zoom || 1, 1, 12);
@@ -84,6 +150,29 @@ export function renderAtlas(svg, sources, selectedId, options = {}) {
   const clip = 'source-atlas-clip', bounds = 'source-atlas-bounds';
   let html = `<defs><clipPath id="${bounds}"><rect x="1" y="26" width="${width - 2}" height="${height - 50}" rx="8"/></clipPath><clipPath id="${clip}"><ellipse cx="${center.x}" cy="${center.y}" rx="${radius}" ry="${radius / 2}"/></clipPath></defs>`;
   html += `<g clip-path="url(#${bounds})"><ellipse cx="${center.x}" cy="${center.y}" rx="${radius}" ry="${radius / 2}" fill="#f7f9fb" stroke="#cbd5df" stroke-width="1.1"/><g clip-path="url(#${clip})">`;
+  const reach = showReach ? reachDeclinationRange(config) : null;
+  const focus = showFov && Number.isFinite(config.fov) && config.fov > 0 && config.fov <= 180 ? sources.find(s => s.id === selectedId && projectAtlas(s.ra, s.dec, frame)) : null;
+  if (reach || focus) {
+    const grid = regionGrid(svg, width, height, center, radius, frame);
+    if (reach) {
+      const key = `${reach.min},${reach.max}`;
+      if (grid.reachKey !== key) {
+        const low = Math.sin(reach.min * D), high = Math.sin(reach.max * D);
+        grid.reachPath = regionPath(grid, (_x, _y, z) => z >= low && z <= high);
+        grid.reachKey = key;
+      }
+      html += `<path data-atlas-layer="reach-fill" d="${grid.reachPath}" fill="#268b83" fill-opacity=".09" pointer-events="none"><title>站址几何可达天区：赤纬 ${reach.min.toFixed(1)}° 至 ${reach.max.toFixed(1)}°；仅天顶角条件</title></path>`;
+    }
+    if (focus) {
+      const key = `${focus.ra},${focus.dec},${config.fov}`;
+      if (grid.fovKey !== key) {
+        const [cx, cy, cz] = direction(focus.ra, focus.dec), cosRadius = Math.cos(config.fov * D);
+        grid.fovPath = regionPath(grid, (x, y, z) => x * cx + y * cy + z * cz >= cosRadius);
+        grid.fovKey = key;
+      }
+      html += `<path data-atlas-layer="fov-fill" d="${grid.fovPath}" fill="#426bc2" fill-opacity=".18" pointer-events="none"/>`;
+    }
+  }
   const polyline = points => points.map((p, i) => { const q = screen(p); return `${i ? 'L' : 'M'}${num(q.x)} ${num(q.y)}`; }).join('');
   // Break at the longitude seam. Joining its two sides draws a false sky track.
   const skyPath = points => {
@@ -106,12 +195,13 @@ export function renderAtlas(svg, sources, selectedId, options = {}) {
       html += `<path d="${polyline(points)}" fill="none" stroke="${lat === 0 ? '#c5d0dc' : '#dde4eb'}" stroke-width="${lat === 0 ? 1 : .7}"/>`;
     }
   }
-  if (showReach && Number.isFinite(config.latitude) && Number.isFinite(config.zmax)) {
-    for (const dec of [config.latitude - config.zmax, config.latitude + config.zmax].filter(d => d > -90 && d < 90)) {
+  if (reach) {
+    for (const dec of [reach.min, reach.max].filter(d => d > -90 && d < 90)) {
       const points = Array.from({ length: 721 }, (_, i) => ({ ra: i / 2, dec }));
       html += `<path data-atlas-layer="reach" d="${skyPath(points)}" fill="none" stroke="#268b83" stroke-width="1.2" stroke-opacity=".65" stroke-dasharray="3 5"><title>几何可达边界 δ=${dec.toFixed(1)}°；仅天顶角条件，不含太阳、月亮与日期</title></path>`;
     }
   }
+  if (focus) html += `<path data-atlas-layer="fov" d="${skyPath(fovBoundary(focus, config.fov))}" fill="none" stroke="#426bc2" stroke-width="1.5" stroke-dasharray="5 3" pointer-events="none"><title>${esc(focus.name ?? focus.id)} 为指向中心，视场半径 ${config.fov}°（直径 ${2 * config.fov}°）；表示角范围，不含接收效率</title></path>`;
   if (showPlane) {
     const points = Array.from({ length: 721 }, (_, i) => galacticToEquatorial(i / 2, 0));
     html += `<path data-atlas-layer="plane" d="${skyPath(points)}" fill="none" stroke="#b99653" stroke-width="1.25" stroke-opacity=".8" stroke-dasharray="6 4"><title>银道面 b=0°</title></path>`;
@@ -119,8 +209,10 @@ export function renderAtlas(svg, sources, selectedId, options = {}) {
     html += `<path d="M${p.x - 5} ${p.y}H${p.x + 5}M${p.x} ${p.y - 5}V${p.y + 5}" stroke="#987337" stroke-width="1.2"><title>银心方向 l=0°，b=0°；坐标参考标记，非恒星</title></path>`;
     if (inView(p)) labels.push({ text: '银心', x: p.x + 9, y: p.y - 9, color: '#947137', priority: 1 });
   }
-  const ordered = [...sources.filter(s => s.id !== selectedId), ...sources.filter(s => s.id === selectedId)];
-  for (const s of ordered) {
+  let selectedDecoration = '';
+  // Keep interactive markers in catalog order so a selection redraw does not
+  // move the focused marker to the end of the keyboard tab sequence.
+  for (const s of sources) {
     const projected = projectAtlas(s.ra, s.dec, frame);
     if (!projected) continue;
     const p = screen(projected);
@@ -130,12 +222,12 @@ export function renderAtlas(svg, sources, selectedId, options = {}) {
     const color = colorBy === 'month' ? atlasHourColor(hours) : /lhaaso/i.test(catalog) ? '#268b83' : '#426bc2';
     const r = selected ? 5 : 3.2, name = String(s.name ?? s.id);
     const title = `${name} · RA ${s.ra.toFixed(3)}° · Dec ${s.dec.toFixed(3)}°${colorBy === 'month' ? ` · ${Number.isFinite(hours) ? `${month + 1}月 ${hours.toFixed(1)} h` : '可观测时长尚未计算'}` : ` · ${catalog}`}`;
-    if (selected) html += `<circle cx="${p.x}" cy="${p.y}" r="10" fill="#ffffff" fill-opacity=".8" stroke="#263e60" stroke-width="1.2" pointer-events="none"/>`;
+    if (selected) selectedDecoration = `<g aria-hidden="true" pointer-events="none"><circle cx="${p.x}" cy="${p.y}" r="10" fill="#ffffff" fill-opacity=".8" stroke="#263e60" stroke-width="1.2"/><circle cx="${p.x}" cy="${p.y}" r="5" fill="${color}" stroke="#fff" stroke-width="1.5"/></g>`;
     html += `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${color}" fill-opacity="${selected ? 1 : .85}" stroke="${selected ? '#fff' : '#ffffffb3'}" stroke-width="${selected ? 1.5 : .65}" data-source="${esc(s.id)}" tabindex="0" role="button" aria-label="${esc(`查看 ${title}`)}"><title>${esc(title)}</title></circle>`;
     hits.push({ x: p.x, y: p.y, r, kind: 'source', id: s.id, name, ra: s.ra, dec: s.dec });
     if (selected || showLabels) labels.push({ text: name, x: p.x + 8, y: p.y - 8, color: selected ? '#263e60' : '#536578', priority: selected ? 2 : 0 });
   }
-  html += '</g>';
+  html += selectedDecoration + '</g>';
   // Selected labels win; other names are suppressed when their boxes collide.
   for (const label of labels.sort((a, b) => b.priority - a.priority)) {
     const text = label.text.length > 29 ? label.text.slice(0, 28) + '…' : label.text;

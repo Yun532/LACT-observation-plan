@@ -6,7 +6,7 @@ import { matchesSource } from './source-search.js';
 import { COLORS, renderTrajectory, renderAllSky, separation } from './charts.js';
 import { renderSiteSky, projectHorizontal } from './sky-chart.js';
 import { bindSkyNavigation, limitSkyView, zoomSkyView, skyHitsAt } from './sky-navigation.js';
-import { renderAtlas, projectAtlas, unprojectAtlas, equatorialToGalactic, limitAtlasView } from './atlas-chart.js';
+import { renderAtlas, projectAtlas, unprojectAtlas, equatorialToGalactic, limitAtlasView, reachDeclinationRange } from './atlas-chart.js';
 import { renderNeighborField, neighborEntries, neighborhoodRadius, extensionText } from './neighbor-chart.js';
 import { parsePrivateCatalog, PRIVATE_CATALOG_LIMITS } from './private-catalog.js';
 import { catalogFingerprint, localCatalog, combineCatalogs, checkPlanCatalogIdentity, PRIVATE_PLAN_PREFIX, PRIVATE_PRIORITY_PREFIX } from './local-catalog-store.js';
@@ -35,7 +35,7 @@ const clearEpoch=()=>{try{return Number(localStorage.getItem(CLEAR_PRIVATE_KEY))
 let privateEpoch=clearEpoch();
 const nightPicker = {key:'',rows:null,worker:null,error:''};
 const sky = {stars:[],meta:null,loading:false,error:'',positions:null,key:'',hits:[],view:{zoom:1,x:0,y:0},viewport:null,showStars:saved.sky?.showStars!==false,showNeighborStars:(saved.sky?.showNeighborStars??saved.sky?.showStars)!==false,showTracks:saved.sky?.showTracks!==false,showExtensions:saved.sky?.showExtensions!==false};
-const atlas = {mode:'atlas',frame:'equatorial',colorBy:'catalog',showGrid:true,showPlane:true,showReach:true,showLabels:false,view:{zoom:1,x:0,y:0},inspected:'',limit:12,result:null,expanded:false};
+const atlas = {mode:'atlas',frame:'equatorial',colorBy:'catalog',showGrid:true,showPlane:true,showReach:true,showFov:true,showLabels:false,view:{zoom:1,x:0,y:0},inspected:'',limit:12,result:null,expanded:false};
 const source = id => S.byId.get(id);
 const nightConfig = () => ({...S.config,mode:'LACT',startHour:18});
 const color = id => S.visible.includes(id) ? COLORS[S.visible.indexOf(id) % COLORS.length] : '#8793a7';
@@ -180,17 +180,25 @@ function renderOverview(){
   if(S.view==='sky')renderAtlasView(items);
 }
 function drawAtlasMap(items=filteredSources()){
+  const focusedSource=$('atlas-sky').contains(document.activeElement)?document.activeElement.dataset.source:null;
   if($('atlas-sky').contains(document.activeElement)&&document.activeElement!==$('atlas-sky'))$('atlas-sky').focus({preventScroll:true});
   const classic=atlas.mode==='classic';
   $('all-sky').toggleAttribute('hidden',!classic);$('atlas-sky').toggleAttribute('hidden',classic);
   document.querySelectorAll('.atlas-enhanced-control').forEach(el=>el.hidden=classic);
   if(classic)renderAllSky($('all-sky'),items,atlas.inspected);
   else atlas.result=renderAtlas($('atlas-sky'),items,atlas.inspected,{...atlas,month:S.month,monthly:S.annual?.monthly,config:S.config});
+  if(focusedSource===atlas.inspected&&!classic)$('atlas-sky').querySelector(`[data-source="${CSS.escape(focusedSource)}"]`)?.focus({preventScroll:true});
   $('atlas-zoom-value').textContent=atlas.view.zoom.toFixed(1)+'×';
   $('atlas-zoom-in').disabled=atlas.view.zoom>=12;$('atlas-zoom-out').disabled=atlas.view.zoom<=1;
   $('atlas-empty').hidden=items.length>0;
   $('atlas-hint').textContent=classic?'经典 1.0 · 目录赤道坐标，赤经向左增加；等距经纬图，不表示等立体角。点击源进入单夜工作台。':'Mollweide 等面积投影 · 滚轮 / 双指缩放，放大后拖动 · + / − 与方向键可操作，Home 复位。';
   $('atlas-science-note').hidden=classic;
+  const range=reachDeclinationRange(S.config),signed=n=>(n>=0?'+':'')+n.toFixed(2)+'°';
+  $('atlas-reach-range').textContent=range?`可达赤纬 ${signed(range.min)} 至 ${signed(range.max)}`:'';
+  $('atlas-reach-explanation').textContent=`浅绿色区域表示天体在上中天（一天中位置最高）时能满足天顶角限制的天区；虚线是它的边界。最低天顶角 z = |赤纬 − 台站纬度|。当前台站纬度 ${signed(S.config.latitude)}，天顶角上限 ${S.config.zmax}°；区域覆盖上述赤纬范围内的全部赤经，并非此刻同时可见的天空。`;
+  $('atlas-fov-radius').value=S.config.fov;
+  $('atlas-fov-size').textContent=`直径 ${+(S.config.fov*2).toFixed(3)}° · 与单夜视场共用设置`;
+  $('atlas-center-fov').disabled=!source(atlas.inspected);
   $('atlas-legend').innerHTML=atlas.colorBy==='month'&&!classic?'<span>月度可观测 / h</span><span>0</span><i class="atlas-hours-scale"></i><span>≥ 240</span><span class="atlas-missing-key">灰色：待计算</span>':'<span><i class="atlas-key tev"></i>TeVCat</span><span><i class="atlas-key lhaaso"></i>LHAASO</span><span class="atlas-missing-key">圆点表示目录位置</span>';
 }
 function renderAtlasDetail(){
@@ -198,6 +206,10 @@ function renderAtlasDetail(){
   if(!s){$('atlas-detail').innerHTML='<span class="eyebrow">SOURCE INSPECTOR</span><h3>选择一个天区目标</h3><p>源列表与上方搜索、目录筛选和排序同步。</p>';return;}
   const monthly=S.annual?.monthly[s.id],g=equatorialToGalactic(s.ra,s.dec),max=Math.max(1,...(monthly||[]));
   $('atlas-detail').innerHTML=`<div class="atlas-detail-top"><span class="eyebrow">SOURCE INSPECTOR</span><span class="atlas-catalog-tag">${esc(s.catalog)}${s.private?' · 本地':''}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.type||'未分类')}${priority(s.id)?' · '+'★'.repeat(priority(s.id)):''}</p><dl class="atlas-coordinates"><div><dt>RA / Dec</dt><dd>${s.ra.toFixed(3)}° / ${s.dec.toFixed(3)}°</dd></div><div><dt>l / b</dt><dd>${g.l.toFixed(3)}° / ${g.b.toFixed(3)}°</dd></div></dl><div class="atlas-window-values"><div><span>${S.year} 年 ${S.month+1} 月</span><strong>${monthly?monthly[S.month].toFixed(1):'—'}<small> h</small></strong></div><div><span>全年可用</span><strong>${monthly?Math.round(sum(monthly)):'—'}<small> h</small></strong></div></div><div class="atlas-month-bars" aria-label="该源十二个月可观测时长">${Array.from({length:12},(_,m)=>`<button type="button" data-cell-source="${esc(s.id)}" data-cell-month="${m}" aria-label="${esc(s.name)} ${m+1}月 ${monthly?monthly[m].toFixed(1)+'小时':'待计算'}，查看逐夜窗口" title="${m+1}月 · ${monthly?monthly[m].toFixed(1)+' h':'待计算'}"><span style="height:${monthly?Math.max(2,monthly[m]/max*40):2}px" class="${m===S.month?'selected':''}"></span><small>${m+1}</small></button>`).join('')}</div><div class="atlas-detail-actions"><button type="button" class="primary-button" data-atlas-open="${esc(s.id)}">单夜规划 →</button><button type="button" class="text-button" data-atlas-info="${esc(s.id)}">源表信息</button></div><p class="atlas-note">${s.private?'FK5 / J2000':'ICRS'} · 目录坐标；时长使用当前观测条件。</p>`;
+  if(atlas.mode==='atlas'&&atlas.showFov){
+    const inside=S.sources.map(item=>({item,distance:separation(s,item)})).filter(entry=>entry.distance<=S.config.fov+1e-9).sort((a,b)=>a.distance-b.distance);
+    $('atlas-detail').insertAdjacentHTML('beforeend',`<div class="atlas-field-summary"><strong><i class="atlas-region-key fov"></i> 当前预览源的视场</strong><span>半径 ${S.config.fov}° · 直径 ${+(2*S.config.fov).toFixed(3)}°</span><details><summary>包含 ${inside.length} 条目录记录 · 查看</summary><div class="atlas-field-sources">${inside.map(({item,distance})=>`<button type="button" data-atlas-info="${esc(item.id)}" title="查看 ${esc(item.name)} · ${esc(item.catalog)}；距视场中心 ${distance.toFixed(2)}°"><span>${esc(item.name)}</span><small>${distance.toFixed(2)}°</small></button>`).join('')}</div></details><p>按全部已载入目录的源中心判断，含当前源；跨目录可能重复。延展源不一定完全落在视场内。</p></div>`);
+  }
 }
 function renderAtlasView(items=filteredSources()){
   $('atlas-search').value=S.filter;
@@ -585,7 +597,12 @@ function bindEvents(){
   $('atlas-mode').onchange=event=>{atlas.mode=event.target.value;if(atlas.mode==='classic'&&atlas.expanded)expandAtlas(false);renderAtlasView();};
   $('atlas-frame').onchange=event=>{atlas.frame=event.target.value;atlas.view={zoom:1,x:0,y:0};drawAtlasMap();};
   $('atlas-color').onchange=event=>{atlas.colorBy=event.target.value;drawAtlasMap();};
-  for(const [id,key] of [['atlas-grid','showGrid'],['atlas-plane','showPlane'],['atlas-reach','showReach'],['atlas-labels','showLabels']])$(id).onchange=event=>{atlas[key]=event.target.checked;drawAtlasMap();};
+  for(const [id,key] of [['atlas-grid','showGrid'],['atlas-plane','showPlane'],['atlas-reach','showReach'],['atlas-fov','showFov'],['atlas-labels','showLabels']])$(id).onchange=event=>{atlas[key]=event.target.checked;drawAtlasMap();if(key==='showFov')renderAtlasDetail();};
+  $('atlas-fov-radius').onchange=event=>{
+    if(!event.target.reportValidity()||!event.target.value){event.target.value=S.config.fov;return;}
+    S.config={...S.config,...M.validateConfig({...S.config,fov:Number(event.target.value)})};
+    invalidateNight();S.revision++;savePreferences();savePlan();drawAtlasMap();renderAtlasDetail();
+  };
   $('atlas-more').onclick=()=>{atlas.limit+=12;renderAtlasView();};
   $('atlas-expand').onclick=()=>expandAtlas(!atlas.expanded);
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&atlas.expanded&&!document.querySelector('dialog[open]'))expandAtlas(false);});
@@ -594,6 +611,7 @@ function bindEvents(){
   $('atlas-zoom-in').onclick=()=>{if(atlas.result)changeAtlasView(zoomSkyView(atlas.view,atlas.result.viewport,1.5));};
   $('atlas-zoom-out').onclick=()=>{if(atlas.result)changeAtlasView(zoomSkyView(atlas.view,atlas.result.viewport,1/1.5));};
   $('atlas-reset').onclick=()=>changeAtlasView({zoom:1,x:0,y:0});
+  $('atlas-center-fov').onclick=()=>{const s=source(atlas.inspected);if(s){atlas.showFov=true;$('atlas-fov').checked=true;changeAtlasView({zoom:Math.min(12,Math.max(2,45/S.config.fov)),...projectAtlas(s.ra,s.dec,atlas.frame)});renderAtlasDetail();}};
   bindSkyNavigation($('atlas-sky'),{
     getView:()=>atlas.view,getViewport:()=>atlas.result?.viewport,change:changeAtlasView,
     hover:p=>{
@@ -611,7 +629,7 @@ function bindEvents(){
       else if(hits.length>1){$('atlas-picks').innerHTML='<span>此处有多个目录条目，选择源进入单夜：</span>'+hits.map(h=>`<button type="button" data-atlas-open="${esc(h.id)}">${esc(h.name)} <small>${esc(source(h.id).catalog)}</small></button>`).join('');$('atlas-picks').hidden=false;}
     },
   });
-  $('atlas-sky').addEventListener('focusin',event=>{const id=event.target.closest('[data-source]')?.dataset.source;if(id){atlas.inspected=id;renderAtlasDetail();$('atlas-readout').textContent=source(id).name+' · Enter 进入单夜规划';}});
+  $('atlas-sky').addEventListener('focusin',event=>{const id=event.target.closest('[data-source]')?.dataset.source;if(id){if(atlas.inspected!==id){atlas.inspected=id;renderAtlasDetail();drawAtlasMap();}$('atlas-readout').textContent=source(id).name+' · Enter 进入单夜规划';}});
   $('atlas-sky').addEventListener('keydown',event=>{const id=event.target.closest('[data-source]')?.dataset.source;if(id&&['Enter',' '].includes(event.key)){event.preventDefault();chooseFocus(id,{open:true});}});
   $('task-select').onchange=event=>{S.selected=+event.target.value;chooseFocus(S.blocks.find(b=>b.id===S.selected).source);};
   $('task-form').onsubmit=event=>{

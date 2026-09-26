@@ -12,6 +12,26 @@
   .atlas-layerbar label{display:flex;gap:5px;align-items:center;white-space:nowrap;cursor:pointer}
   .atlas-layerbar input{width:12px;height:12px;margin:0;accent-color:#4e797c}
   .atlas-layerbar button{margin-left:auto;font-size:11px;color:#597a82}
+  .atlas-region-key{display:inline-block;width:12px;height:9px;border-radius:2px;flex-shrink:0}
+  .atlas-region-key.reach{background:#d5e8e1;border:1px dashed #5f998a}
+  .atlas-region-key.fov{background:#c6ddf4;border:1px solid #357fba}
+  .atlas-fov-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px 18px;padding:0 6px 12px;color:#718692;font-size:11px}
+  .atlas-fov-controls label{display:flex;align-items:center;gap:6px;color:#527084}
+  .atlas-fov-controls input{width:65px;padding:5px 7px;font-size:11px;border-color:#d4e0e5;background:#fff;text-align:right;font-variant-numeric:tabular-nums}
+  .atlas-fov-controls button{font-size:11px;color:#397aa3}
+  .atlas-region-guide{font-size:11px;line-height:1.8;color:#75878c;margin-top:10px;padding:10px 12px;border:1px solid #e0e9e4;border-radius:7px;background:#ffffff70}
+  .atlas-region-guide summary{cursor:pointer;color:#59766f}
+  .atlas-region-guide summary span{display:inline-block;margin-left:12px;font-size:10px;color:#879a96}
+  .atlas-region-guide p{margin:8px 0 0}
+  .atlas-field-summary{padding:12px;margin-top:16px;border-radius:7px;background:#edf4f9;border:1px solid #dae6ef;color:#59788f;font-size:11px;line-height:1.6}
+  .atlas-field-summary>strong{display:block;font-weight:500;color:#3a698d}
+  .atlas-field-summary p{font-size:10px;margin:4px 0 0;color:#7b909f}
+  .atlas-field-summary summary{cursor:pointer;margin-top:9px;color:#527b96}
+  .atlas-field-sources{max-height:150px;overflow:auto;margin-top:7px;overscroll-behavior:contain}
+  .atlas-field-sources button{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;background:none;text-align:left;font-size:10px;padding:5px 0;color:#50728a}
+  .atlas-field-sources button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .atlas-field-sources button small{white-space:nowrap;color:#8b9eaa}
+  .atlas-field-sources button:hover{color:#285b91;text-decoration:underline}
   .atlas-stage{position:relative;border:1px solid #e2e8e6;border-radius:10px;background:#fbfcfa;overflow:hidden}
   #atlas-sky{display:block;width:100%;touch-action:none;cursor:grab;outline-offset:-3px}
   #atlas-sky:focus-visible{outline:2px solid #6689ae}
