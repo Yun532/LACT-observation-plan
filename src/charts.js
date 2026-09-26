@@ -126,6 +126,6 @@ export function renderAllSky(svg,sources,selectedId) {
       html+=label(xx+(right?12:-12),clamp(yy-10,top+14,bottom-5),name,`text-anchor="${right?'start':'end'}" style="fill:${INK};font-size:11px;paint-order:stroke;stroke:#f8fafc;stroke-width:4px;stroke-linejoin:round" pointer-events="none"`);
     }
   }
-  finish(svg,w,height,html,'全部源的 ICRS 赤经、赤纬分布。横轴为反向赤经，纵轴为赤纬；这是等距经纬坐标图，不表示等立体角。选择点可查看该源。');
+  finish(svg,w,height,html,'目录源的赤经、赤纬分布，原始坐标系见源表信息。横轴为反向赤经，纵轴为赤纬；这是等距经纬坐标图，不表示等立体角。选择点可查看该源。');
   svg.setAttribute('role','group');
 }

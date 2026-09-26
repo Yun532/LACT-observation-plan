@@ -1,10 +1,12 @@
 import './style.css';
+import './atlas.css';
 import { computeNight, computeMonth, skyAt, DEFAULTS } from './astronomy.js';
 import M from './planning.mjs';
 import { matchesSource } from './source-search.js';
 import { COLORS, renderTrajectory, renderAllSky, separation } from './charts.js';
 import { renderSiteSky, projectHorizontal } from './sky-chart.js';
 import { bindSkyNavigation, limitSkyView, zoomSkyView, skyHitsAt } from './sky-navigation.js';
+import { renderAtlas, projectAtlas, unprojectAtlas, equatorialToGalactic, limitAtlasView } from './atlas-chart.js';
 import { renderNeighborField, neighborEntries, neighborhoodRadius, extensionText } from './neighbor-chart.js';
 import { parsePrivateCatalog, PRIVATE_CATALOG_LIMITS } from './private-catalog.js';
 import { catalogFingerprint, localCatalog, combineCatalogs, checkPlanCatalogIdentity, PRIVATE_PLAN_PREFIX, PRIVATE_PRIORITY_PREFIX } from './local-catalog-store.js';
@@ -33,6 +35,7 @@ const clearEpoch=()=>{try{return Number(localStorage.getItem(CLEAR_PRIVATE_KEY))
 let privateEpoch=clearEpoch();
 const nightPicker = {key:'',rows:null,worker:null,error:''};
 const sky = {stars:[],meta:null,loading:false,error:'',positions:null,key:'',hits:[],view:{zoom:1,x:0,y:0},viewport:null,showStars:saved.sky?.showStars!==false,showNeighborStars:(saved.sky?.showNeighborStars??saved.sky?.showStars)!==false,showTracks:saved.sky?.showTracks!==false,showExtensions:saved.sky?.showExtensions!==false};
+const atlas = {mode:'atlas',frame:'equatorial',colorBy:'catalog',showGrid:true,showPlane:true,showReach:true,showLabels:false,view:{zoom:1,x:0,y:0},inspected:'',limit:12,result:null,expanded:false};
 const source = id => S.byId.get(id);
 const nightConfig = () => ({...S.config,mode:'LACT',startHour:18});
 const color = id => S.visible.includes(id) ? COLORS[S.visible.indexOf(id) % COLORS.length] : '#8793a7';
@@ -89,6 +92,9 @@ function activateCatalog(catalog,fingerprint='',remembered=false,{initial=false,
   $('night-search-results').hidden=true;$('night-search-results').innerHTML='';$('night-search').value='';$('source-search').value='';$('night-picker-search').value='';
   $('source-details').innerHTML='';$('month-days').innerHTML='';$('review-content').innerHTML='';$('about-content').innerHTML='';$('sky-hover').textContent='悬停查看源名、V 星等和位置；点击源切换关注。';
   $('sky-picks').replaceChildren();$('sky-picks').hidden=true;
+  atlas.inspected='';atlas.result=null;
+  for(const id of ['atlas-detail','atlas-source-list','atlas-picks','atlas-sky'])$(id).replaceChildren();
+  $('atlas-picks').hidden=true;$('atlas-readout').textContent='悬停查看坐标与源信息；点击源进入单夜工作台。';
   for(const id of ['source-title','month-title','month-coordinates','month-caption','night-picker-list','night-picker-selected','all-sky'])$(id).replaceChildren();
   $('review-confirm').checked=false;document.querySelectorAll('[data-export]').forEach(b=>b.disabled=true);
   renderCatalogState();renderConditions();
@@ -129,6 +135,7 @@ function renderConditions(){
   $('year').value=S.year;
 }
 function setRoute(route){
+  if(atlas.expanded&&route==='night')expandAtlas(false);
   S.route=route==='night'?'night':'overview';
   $('overview-page').hidden=S.route!=='overview';$('night-page').hidden=S.route!=='night';
   document.querySelectorAll('[data-route]').forEach(b=>{b.classList.toggle('active',b.dataset.route===S.route);b.setAttribute('aria-current',b.dataset.route===S.route?'page':'false');});
@@ -167,8 +174,57 @@ function renderOverview(){
   $('page-number').textContent=`${S.page+1} / ${pages}`;$('prev-page').disabled=S.page===0;$('next-page').disabled=S.page===pages-1;
   $('flux-note').hidden=S.sort!=='flux';$('table-view').hidden=S.view!=='table';$('sky-view').hidden=S.view!=='sky';
   $('table-title').textContent=S.view==='sky'?'目录源的天空位置':'月度可观测时间';
+  document.querySelector('.heat-legend').hidden=S.view==='sky';document.querySelector('.pagination').hidden=S.view==='sky';
+  if(S.view==='sky')$('table-summary').textContent=`${items.length} 条筛选记录 · 目录条目保留独立身份，近邻不合并`;
   document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===S.view));
-  if(S.view==='sky')renderAllSky($('all-sky'),items,S.focus);
+  if(S.view==='sky')renderAtlasView(items);
+}
+function drawAtlasMap(items=filteredSources()){
+  if($('atlas-sky').contains(document.activeElement)&&document.activeElement!==$('atlas-sky'))$('atlas-sky').focus({preventScroll:true});
+  const classic=atlas.mode==='classic';
+  $('all-sky').toggleAttribute('hidden',!classic);$('atlas-sky').toggleAttribute('hidden',classic);
+  document.querySelectorAll('.atlas-enhanced-control').forEach(el=>el.hidden=classic);
+  if(classic)renderAllSky($('all-sky'),items,atlas.inspected);
+  else atlas.result=renderAtlas($('atlas-sky'),items,atlas.inspected,{...atlas,month:S.month,monthly:S.annual?.monthly,config:S.config});
+  $('atlas-zoom-value').textContent=atlas.view.zoom.toFixed(1)+'×';
+  $('atlas-zoom-in').disabled=atlas.view.zoom>=12;$('atlas-zoom-out').disabled=atlas.view.zoom<=1;
+  $('atlas-empty').hidden=items.length>0;
+  $('atlas-hint').textContent=classic?'经典 1.0 · 目录赤道坐标，赤经向左增加；等距经纬图，不表示等立体角。点击源进入单夜工作台。':'Mollweide 等面积投影 · 滚轮 / 双指缩放，放大后拖动 · + / − 与方向键可操作，Home 复位。';
+  $('atlas-science-note').hidden=classic;
+  $('atlas-legend').innerHTML=atlas.colorBy==='month'&&!classic?'<span>月度可观测 / h</span><span>0</span><i class="atlas-hours-scale"></i><span>≥ 240</span><span class="atlas-missing-key">灰色：待计算</span>':'<span><i class="atlas-key tev"></i>TeVCat</span><span><i class="atlas-key lhaaso"></i>LHAASO</span><span class="atlas-missing-key">圆点表示目录位置</span>';
+}
+function renderAtlasDetail(){
+  const s=source(atlas.inspected);
+  if(!s){$('atlas-detail').innerHTML='<span class="eyebrow">SOURCE INSPECTOR</span><h3>选择一个天区目标</h3><p>源列表与上方搜索、目录筛选和排序同步。</p>';return;}
+  const monthly=S.annual?.monthly[s.id],g=equatorialToGalactic(s.ra,s.dec),max=Math.max(1,...(monthly||[]));
+  $('atlas-detail').innerHTML=`<div class="atlas-detail-top"><span class="eyebrow">SOURCE INSPECTOR</span><span class="atlas-catalog-tag">${esc(s.catalog)}${s.private?' · 本地':''}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.type||'未分类')}${priority(s.id)?' · '+'★'.repeat(priority(s.id)):''}</p><dl class="atlas-coordinates"><div><dt>RA / Dec</dt><dd>${s.ra.toFixed(3)}° / ${s.dec.toFixed(3)}°</dd></div><div><dt>l / b</dt><dd>${g.l.toFixed(3)}° / ${g.b.toFixed(3)}°</dd></div></dl><div class="atlas-window-values"><div><span>${S.year} 年 ${S.month+1} 月</span><strong>${monthly?monthly[S.month].toFixed(1):'—'}<small> h</small></strong></div><div><span>全年可用</span><strong>${monthly?Math.round(sum(monthly)):'—'}<small> h</small></strong></div></div><div class="atlas-month-bars" aria-label="该源十二个月可观测时长">${Array.from({length:12},(_,m)=>`<button type="button" data-cell-source="${esc(s.id)}" data-cell-month="${m}" aria-label="${esc(s.name)} ${m+1}月 ${monthly?monthly[m].toFixed(1)+'小时':'待计算'}，查看逐夜窗口" title="${m+1}月 · ${monthly?monthly[m].toFixed(1)+' h':'待计算'}"><span style="height:${monthly?Math.max(2,monthly[m]/max*40):2}px" class="${m===S.month?'selected':''}"></span><small>${m+1}</small></button>`).join('')}</div><div class="atlas-detail-actions"><button type="button" class="primary-button" data-atlas-open="${esc(s.id)}">单夜规划 →</button><button type="button" class="text-button" data-atlas-info="${esc(s.id)}">源表信息</button></div><p class="atlas-note">${s.private?'FK5 / J2000':'ICRS'} · 目录坐标；时长使用当前观测条件。</p>`;
+}
+function renderAtlasView(items=filteredSources()){
+  $('atlas-search').value=S.filter;
+  if(!items.some(s=>s.id===atlas.inspected)){
+    atlas.inspected=items.find(s=>s.id===S.focus)?.id||items[0]?.id||'';
+    atlas.view=items.length===1?{zoom:4,...projectAtlas(items[0].ra,items[0].dec,atlas.frame)}:{zoom:1,x:0,y:0};
+  }
+  $('atlas-month').value=S.month;$('atlas-picks').hidden=true;
+  drawAtlasMap(items);renderAtlasDetail();
+  const sortLabel=$('sort').selectedOptions[0].textContent;
+  $('atlas-list-caption').textContent=sortLabel;
+  $('atlas-source-list').innerHTML=items.slice(0,atlas.limit).map((s,i)=>{
+    const monthly=S.annual?.monthly[s.id],value=S.sort==='year'?monthly?Math.round(sum(monthly))+' h':'—':S.sort==='priority'?priority(s.id)?'★'.repeat(priority(s.id)):'未标记':S.sort==='flux'?s.catalog==='TeVCat'&&s.flux?.unit==='Crab'&&s.flux.value>0?s.flux.value+' Crab':'—':monthly?monthly[S.month].toFixed(1)+' h':'—';
+    return `<button type="button" class="atlas-list-row ${s.id===atlas.inspected?'selected':''}" data-atlas-locate="${esc(s.id)}" title="在天图定位 ${esc(s.name)}"><span class="atlas-rank">${String(i+1).padStart(2,'0')}</span><span class="atlas-list-name"><strong>${esc(s.name)}</strong><small>${esc(s.catalog)} · ${esc(s.type||'未分类')}</small></span><span class="atlas-list-value">${esc(value)}</span></button>`;
+  }).join('')||'<p class="atlas-note">没有符合筛选条件的源。</p>';
+  $('atlas-more').hidden=items.length<=atlas.limit;
+  $('atlas-more').textContent=`显示更多 · ${Math.min(items.length,atlas.limit)} / ${items.length}`;
+}
+function inspectAtlas(id){
+  if(!source(id)||atlas.inspected===id)return;
+  atlas.inspected=id;renderAtlasDetail();drawAtlasMap();
+  document.querySelectorAll('[data-atlas-locate]').forEach(el=>el.classList.toggle('selected',el.dataset.atlasLocate===id));
+}
+function expandAtlas(value){
+  atlas.expanded=value;$('sky-view').classList.toggle('atlas-expanded',value);$('atlas-expand').textContent=value?'收起天图 ↙':'展开天图 ↗';$('atlas-expand').setAttribute('aria-pressed',String(value));
+  document.body.classList.toggle('atlas-is-expanded',value);
+  requestAnimationFrame(()=>{if(S.view==='sky'&&S.route==='overview')drawAtlasMap();});
 }
 function calculateAnnual(){
   if(!S.sources.length)return;
@@ -306,8 +362,9 @@ function drawSiteSky({viewOnly=false}={}){
   $('neighbor-radius').textContent=`半径 ${neighborhoodRadius(c)}° · 含外围 ${c.skyPadding}°`;
   $('neighbors').innerHTML=neighbors.map((s,i)=>`<div class="neighbor-row"><div><button data-focus="${esc(s.id)}"><span style="color:${color(s.id)}">${i+1}.</span> ${esc(s.name)}</button><small>${esc(s.catalog)} · ${esc(extensionText(s))}${s.separation<.1?' · 可能为关联条目':''}${s.separation>neighborhoodRadius(c)?' · 中心在图外，目录尺度圈或上限圈与天区相交':''}</small></div><div>${s.separation.toFixed(2)}°<button class="text-button" data-overlay="${esc(s.id)}">${S.visible.includes(s.id)?'已叠加':'叠加轨迹'}</button></div></div>`).join('')||'<div class="empty-state">该天区没有其他目录条目</div>';
   const starUnavailable=!sky.showNeighborStars?'本图亮星已关闭':!sky.meta?'亮星目录尚未载入':'';
-  $('neighbor-stars-count').textContent=starUnavailable||`亮星 ${nearStars.length} 条记录 · V ≤ ${c.starLimit}`;
-  $('neighbor-stars').innerHTML=starUnavailable?`<p class="footnote">${starUnavailable}</p>`:nearStars.map(s=>`<div class="neighbor-star-row"><span>✦ ${esc(s.name)}</span><span>V ${s.mag.toFixed(2)} · ${separation(source(S.focus),s).toFixed(2)}°${s.alt<0?' · 地平线下':''}</span></div>`).join('')||'<p class="footnote">所选星等阈值下，此天区没有收录的恒星。</p>';
+  $('neighbor-stars-count').closest('details').hidden=!sky.showNeighborStars;
+  $('neighbor-stars-count').textContent=sky.meta?`恒星明细 · ${nearStars.length} 条 · V ≤ ${c.starLimit}`:sky.error?'恒星明细 · 目录暂不可用':'恒星明细 · 目录载入中';
+  $('neighbor-stars').innerHTML=!sky.showNeighborStars?'':starUnavailable?`<p class="footnote">${starUnavailable}</p>`:nearStars.map(s=>`<div class="neighbor-star-row"><span>✦ ${esc(s.name)}</span><span>V ${s.mag.toFixed(2)} · ${separation(source(S.focus),s).toFixed(2)}°${s.alt<0?' · 地平线下':''}</span></div>`).join('')||'<p class="footnote">所选星等阈值下，此天区没有收录的恒星。</p>';
 }
 function drawNightCharts(){
   if(S.route!=='night'||!S.night)return;
@@ -442,7 +499,10 @@ function bindEvents(){
     if(b.dataset.action==='settings'){openSettings();return;}
     if(b.dataset.action==='retry'){calculateAnnual();return;}
     if(b.dataset.action==='retry-stars'){loadStars();return;}
-    if(b.dataset.view){S.view=b.dataset.view;renderOverview();return;}
+    if(b.dataset.view){S.view=b.dataset.view;if(S.view!=='sky'&&atlas.expanded)expandAtlas(false);renderOverview();return;}
+    if(b.dataset.atlasOpen){chooseFocus(b.dataset.atlasOpen,{open:true});return;}
+    if(b.dataset.atlasInfo){sourceDetails(b.dataset.atlasInfo);return;}
+    if(b.dataset.atlasLocate){const s=source(b.dataset.atlasLocate);if(s){atlas.inspected=s.id;atlas.view={zoom:4,...projectAtlas(s.ra,s.dec,atlas.frame)};renderAtlasView();}return;}
     if(b.dataset.monthSort!==undefined){S.month=+b.dataset.monthSort;S.sort='month';$('sort').value=S.sort;S.page=0;renderOverview();return;}
     if(b.dataset.priority){const id=b.dataset.priority;S.priorities[id]=(priority(id)+1)%4;savePreferences();renderOverview();toast(`${source(id).name} · ${priority(id)?'优先级 '+priority(id):'取消重点标记'}`);return;}
     if(b.dataset.openMonth){openMonth(b.dataset.openMonth);return;}
@@ -519,6 +579,40 @@ function bindEvents(){
   $('trajectory').onpointerdown=event=>{const rect=event.currentTarget.getBoundingClientRect(),left=Number(event.currentTarget.dataset.plotLeft)||65,right=Number(event.currentTarget.dataset.plotRight)||20;S.cursor=Math.max(0,Math.min(840,Math.round((event.clientX-rect.left-left)/(rect.width-left-right)*840)));drawNightCharts();};
   $('all-sky').onclick=event=>{const node=event.target.closest('[data-source]');if(node)chooseFocus(node.dataset.source,{open:true});};
   $('all-sky').onkeydown=event=>{const node=event.target.closest('[data-source]');if(node&&['Enter',' '].includes(event.key)){event.preventDefault();chooseFocus(node.dataset.source,{open:true});}};
+  $('atlas-month').innerHTML=Array.from({length:12},(_,m)=>`<option value="${m}">${m+1}月</option>`).join('');
+  $('atlas-month').onchange=event=>{S.month=+event.target.value;S.sort='month';$('sort').value='month';S.page=0;renderOverview();};
+  $('atlas-search').oninput=event=>{S.filter=event.target.value;$('source-search').value=S.filter;S.page=0;renderOverview();};
+  $('atlas-mode').onchange=event=>{atlas.mode=event.target.value;if(atlas.mode==='classic'&&atlas.expanded)expandAtlas(false);renderAtlasView();};
+  $('atlas-frame').onchange=event=>{atlas.frame=event.target.value;atlas.view={zoom:1,x:0,y:0};drawAtlasMap();};
+  $('atlas-color').onchange=event=>{atlas.colorBy=event.target.value;drawAtlasMap();};
+  for(const [id,key] of [['atlas-grid','showGrid'],['atlas-plane','showPlane'],['atlas-reach','showReach'],['atlas-labels','showLabels']])$(id).onchange=event=>{atlas[key]=event.target.checked;drawAtlasMap();};
+  $('atlas-more').onclick=()=>{atlas.limit+=12;renderAtlasView();};
+  $('atlas-expand').onclick=()=>expandAtlas(!atlas.expanded);
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&atlas.expanded&&!document.querySelector('dialog[open]'))expandAtlas(false);});
+  let atlasFrame;
+  const changeAtlasView=view=>{atlas.view=limitAtlasView(view);$('atlas-picks').hidden=true;cancelAnimationFrame(atlasFrame);atlasFrame=requestAnimationFrame(()=>{if(S.view==='sky'&&S.route==='overview')drawAtlasMap();});};
+  $('atlas-zoom-in').onclick=()=>{if(atlas.result)changeAtlasView(zoomSkyView(atlas.view,atlas.result.viewport,1.5));};
+  $('atlas-zoom-out').onclick=()=>{if(atlas.result)changeAtlasView(zoomSkyView(atlas.view,atlas.result.viewport,1/1.5));};
+  $('atlas-reset').onclick=()=>changeAtlasView({zoom:1,x:0,y:0});
+  bindSkyNavigation($('atlas-sky'),{
+    getView:()=>atlas.view,getViewport:()=>atlas.result?.viewport,change:changeAtlasView,
+    hover:p=>{
+      if(!atlas.result)return;
+      const h=skyHitsAt(atlas.result.hits,p)[0],v=atlas.result.viewport,r=v.baseRadius*atlas.view.zoom;
+      const coords=h?{ra:h.ra,dec:h.dec,...equatorialToGalactic(h.ra,h.dec)}:unprojectAtlas((p.x-v.centerX)/r+atlas.view.x,(p.y-v.centerY)/r+atlas.view.y,atlas.frame);
+      $('atlas-sky').style.cursor=h?'pointer':'grab';
+      $('atlas-readout').textContent=coords?`${h?h.name+' · ':'光标 · '}RA ${coords.ra.toFixed(2)}°  Dec ${coords.dec.toFixed(2)}°　|　l ${coords.l.toFixed(2)}°  b ${coords.b.toFixed(2)}°`:'图外 · 悬停图内查看坐标';
+      if(h)inspectAtlas(h.id);
+    },
+    pick:p=>{
+      const seen=new Set(),hits=skyHitsAt(atlas.result?.hits||[],p).filter(h=>!seen.has(h.id)&&seen.add(h.id));
+      $('atlas-picks').hidden=true;
+      if(hits.length===1)chooseFocus(hits[0].id,{open:true});
+      else if(hits.length>1){$('atlas-picks').innerHTML='<span>此处有多个目录条目，选择源进入单夜：</span>'+hits.map(h=>`<button type="button" data-atlas-open="${esc(h.id)}">${esc(h.name)} <small>${esc(source(h.id).catalog)}</small></button>`).join('');$('atlas-picks').hidden=false;}
+    },
+  });
+  $('atlas-sky').addEventListener('focusin',event=>{const id=event.target.closest('[data-source]')?.dataset.source;if(id){atlas.inspected=id;renderAtlasDetail();$('atlas-readout').textContent=source(id).name+' · Enter 进入单夜规划';}});
+  $('atlas-sky').addEventListener('keydown',event=>{const id=event.target.closest('[data-source]')?.dataset.source;if(id&&['Enter',' '].includes(event.key)){event.preventDefault();chooseFocus(id,{open:true});}});
   $('task-select').onchange=event=>{S.selected=+event.target.value;chooseFocus(S.blocks.find(b=>b.id===S.selected).source);};
   $('task-form').onsubmit=event=>{
     event.preventDefault();const b=S.blocks.find(b=>b.id===S.selected);if(!b||!event.target.reportValidity())return;
@@ -548,7 +642,7 @@ function bindEvents(){
   track.onpointermove=event=>{if(!drag)return;const delta=Math.round((event.clientX-drag.x)/track.getBoundingClientRect().width*840/5)*5;if(!delta&&!drag.moved)return;drag.moved=true;let start=drag.start,duration=drag.duration;if(drag.mode==='move')start=Math.max(0,Math.min(840-duration,start+delta));if(drag.mode==='left'){start=Math.max(0,Math.min(start+duration-5,start+delta));duration=drag.start+drag.duration-start;}if(drag.mode==='right')duration=Math.max(5,Math.min(840-start,duration+delta));drag.next={start,duration};drag.element.style.left=start/840*100+'%';drag.element.style.width=duration/840*100+'%';$('schedule-message').textContent=`#${drag.id} → ${M.clock(start,nightConfig())} — ${M.clock(start+duration,nightConfig())}`;};
   track.onpointerup=()=>{if(!drag)return;const d=drag;drag=null;const b=S.blocks.find(b=>b.id===d.id);if(d.moved&&d.next){remember();Object.assign(b,d.next);S.selected=b.id;S.focus=b.source;if(!S.visible.includes(b.source))S.visible=[...S.visible.slice(0,5),b.source];edited('任务时段已调整，所有冲突已重新检查。');}else{S.selected=b.id;chooseFocus(b.source);}};
   track.onpointercancel=()=>{drag=null;renderNight();};
-  window.addEventListener('resize',()=>{cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(()=>{if(S.route==='night')drawNightCharts();else if(S.view==='sky')renderAllSky($('all-sky'),filteredSources(),S.focus);});});
+  window.addEventListener('resize',()=>{cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(()=>{if(S.route==='night')drawNightCharts();else if(S.view==='sky')drawAtlasMap();});});
   window.addEventListener('hashchange',()=>setRoute(location.hash==='#night'?'night':'overview'));
   window.addEventListener('storage',event=>{if(event.key===CLEAR_PRIVATE_KEY&&privateCatalog){activateCatalog(null,'',false,{discard:true});toast('另一页面已清除私有数据，本页已切回公开目录。');}});
 }
