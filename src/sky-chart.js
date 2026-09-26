@@ -38,13 +38,14 @@ export function horizontalCircle(alt, az, radius, steps = 180) {
   });
 }
 
-function skyGrid(canvas, cx, cy, radius) {
+function skyGrid(canvas, cx, cy, radius, width, height) {
   let grid = grids.get(canvas);
-  if (grid?.radius === radius && grid.cx === cx && grid.cy === cy) return grid;
+  if (grid?.radius === radius && grid.cx === cx && grid.cy === cy && grid.width === width && grid.height === height) return grid;
   const step = 3, rows = [];
-  for (let y = cy - radius; y < cy + radius; y += step) {
+  // Sample the visible canvas only, so zooming does not grow the lunar mask work.
+  for (let y = Math.max(0, cy - radius); y < Math.min(height, cy + radius); y += step) {
     const cells = [];
-    for (let x = cx - radius; x < cx + radius; x += step) {
+    for (let x = Math.max(0, cx - radius); x < Math.min(width, cx + radius); x += step) {
       const p = unprojectHorizontal((x + step / 2 - cx) / radius, (y + step / 2 - cy) / radius);
       if (p.alt < 0) continue;
       const a = p.alt * DEG, z = p.az * DEG;
@@ -52,7 +53,7 @@ function skyGrid(canvas, cx, cy, radius) {
     }
     rows.push({ y, cells });
   }
-  grid = { cx, cy, radius, rows, step };
+  grid = { cx, cy, radius, width, height, rows, step };
   grids.set(canvas, grid);
   return grid;
 }
@@ -77,22 +78,27 @@ export function extensionLabel(source) {
 /** Paint the instantaneous visible hemisphere; all returned hit coordinates are CSS pixels. */
 export function renderSiteSky(canvas, {
   night, positions, sources = [], visible = [], focus, cursor = 0, config = {}, stars = [],
-  showTracks = true, showStars = true, showExtensions = true,
+  showTracks = true, showStars = true, showExtensions = true, view = {},
 }) {
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(240, Math.round(rect.width || 560));
   const height = Math.max(260, Math.round(rect.height || Math.min(440, width + 20)));
+  const zoom = clamp(finite(view.zoom) ? view.zoom : 1, 1, 12);
+  const x = finite(view.x) ? view.x : 0, y = finite(view.y) ? view.y : 0;
+  const baseRadius = Math.min(width / 2 - 37, height / 2 - 31), radius = baseRadius * zoom;
+  const centerX = width / 2, centerY = height / 2 + 1, cx = centerX - x * radius, cy = centerY - y * radius;
+  const viewport = { width, height, baseRadius, centerX, centerY, zoom, x, y };
   const dpr = Math.min(globalThis.devicePixelRatio || 1, 3);
   canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
   const ctx = canvas.getContext('2d');
-  const empty = { hits: [], sourceCount: 0, starCount: 0, selectedAbove: 0, moonRestricted: false, sunBlocked: false, width, height };
+  const empty = { hits: [], sourceCount: 0, starCount: 0, selectedAbove: 0, moonRestricted: false, sunBlocked: false, width, height, viewport };
   if (!ctx) return empty;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
   ctx.font = '11px system-ui, sans-serif';
   ctx.textBaseline = 'middle';
-  const c = { ...M.defaults, ...config }, cx = width / 2, cy = height / 2 + 1;
-  const radius = Math.min(width / 2 - 37, height / 2 - 31);
+  const c = { ...M.defaults, ...config };
+  const onScreen = p => p.x >= 0 && p.x <= width && p.y >= 0 && p.y <= height;
   const point = p => { const q = projectHorizontal(p.alt, p.az); return { x: cx + q.x * radius, y: cy + q.y * radius }; };
   const color = id => COLORS[visible.indexOf(id) % COLORS.length] || '#8793a7';
   const byPosition = new Map((positions?.sources || []).map(p => [p.id, p]));
@@ -106,6 +112,7 @@ export function renderSiteSky(canvas, {
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke(); }
   };
   const label = (text, x, y, ink = '#778399', align = 'left') => {
+    if (!onScreen({ x, y })) return;
     ctx.fillStyle = ink; ctx.textAlign = align; ctx.fillText(text, x, y);
   };
   const smallCircle = (p, angle, stroke, dash = [], opacity = 1) => {
@@ -128,7 +135,7 @@ export function renderSiteSky(canvas, {
   // A small angular cap can cross the horizon even when the Moon itself is below it.
   // Compute each grid cell on the sphere, including radii greater than 90 degrees.
   if (moonRestricted && c.moon > 0) {
-    const grid = skyGrid(canvas, cx, cy, radius), a = moon.alt * DEG, z = moon.az * DEG;
+    const grid = skyGrid(canvas, cx, cy, radius, width, height), a = moon.alt * DEG, z = moon.az * DEG;
     const north = Math.cos(a) * Math.cos(z), east = Math.cos(a) * Math.sin(z), up = Math.sin(a), threshold = Math.cos(c.moon * DEG);
     ctx.beginPath();
     for (const row of grid.rows) {
@@ -173,11 +180,12 @@ export function renderSiteSky(canvas, {
     const bins = new Map();
     for (const star of stars) {
       const p = byPosition.get(star.id); if (!validPosition(p) || p.alt < 0 || !finite(star.mag)) continue;
+      out.starCount++;
       const xy = point(p), size = clamp(1.2 + (8 - star.mag) * .56, 1.2, 6), bin = Math.round(star.mag * 4) / 4;
+      if (!onScreen(xy)) continue;
       if (!bins.has(bin)) bins.set(bin, []);
       bins.get(bin).push(xy);
       out.hits.push({ ...xy, r: Math.max(size + 2, 3), kind: 'star', id: star.id, name: star.name || star.id, mag: star.mag, alt: p.alt, az: p.az, ra: p.ra ?? star.ra, dec: p.dec ?? star.dec });
-      out.starCount++;
       if (star.name && star.mag <= 1.6) brightLabels.push({ ...star, ...xy });
     }
     for (const [mag, points] of [...bins].sort((a, b) => b[0] - a[0])) {
@@ -213,15 +221,18 @@ export function renderSiteSky(canvas, {
         const cp=byPosition.get(component.id);if(!validPosition(cp))continue;
         drawExtension(cp,component.extension,ink,active);
         if(cp.alt<0)continue;
-        const cxy=point(cp);disk(cxy.x,cxy.y,3,'#fff',ink,1.3);
+        const cxy=point(cp);if(!onScreen(cxy))continue;
+        disk(cxy.x,cxy.y,3,'#fff',ink,1.3);
         out.hits.push({...cxy,r:5,kind:'source',id:source.id,componentId:component.id,name:component.name,alt:cp.alt,az:cp.az,ra:cp.ra??component.ra,dec:cp.dec??component.dec,extension:component.extension,selected:active});
       }
     }
     if (p.alt < 0) continue;
     out.sourceCount++;
+    if (active) out.selectedAbove++;
+    if (!onScreen(xy)) continue;
     const hit = { ...xy, r: active ? 8 : 4, kind: 'source', id: source.id, name: source.name, alt: p.alt, az: p.az, ra: p.ra ?? source.ra, dec: p.dec ?? source.dec, extension: ext, selected: active };
     out.hits.push(hit);
-    if (active) { selected.push({ source, p, xy }); out.selectedAbove++; }
+    if (active) selected.push({ source, p, xy });
     else disk(xy.x, xy.y, 2.4, '#ffffff', '#6a84a4cc', 1.1);
   }
   ctx.restore();
@@ -236,6 +247,7 @@ export function renderSiteSky(canvas, {
   label('高 30°', cx + 6, cy - radius * 2 / 3 + 9, '#8793a7');
   const labels = [];
   function collisionLabel(text, p, ink, priority = false) {
+    if (!onScreen(p)) return;
     const measure = ctx.measureText(text).width;
     const x = p.x > cx + radius * .48 ? p.x - measure - 9 : p.x + 9;
     const y = p.y - 10, box = { x: clamp(x, 4, width - measure - 4), y, w: measure + 5, h: 15 };
@@ -255,7 +267,8 @@ export function renderSiteSky(canvas, {
 
   const body = (name, kind, p, ink, fill) => {
     if (!validPosition(p) || p.alt < 0) return;
-    const xy = point(p); disk(xy.x, xy.y, 6, fill, ink, 1.4);
+    const xy = point(p); if (!onScreen(xy)) return;
+    disk(xy.x, xy.y, 6, fill, ink, 1.4);
     if (kind === 'sun') {
       ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.moveTo(xy.x + Math.cos(a) * 8, xy.y + Math.sin(a) * 8); ctx.lineTo(xy.x + Math.cos(a) * 10, xy.y + Math.sin(a) * 10); }
       ctx.strokeStyle = ink; ctx.stroke();
@@ -265,9 +278,12 @@ export function renderSiteSky(canvas, {
   };
   body('太阳', 'sun', sun, '#b17a30', '#edd39c');
   body('月亮', 'moon', moon, '#9c7a42', '#d7bd80');
-  const status = sunBlocked ? `太阳高 ${sun.alt.toFixed(1)}° · 尚未满足暗夜条件` : '当前时刻 · 地平线以上的天空';
+  const fullSky = zoom === 1 && x === 0 && y === 0;
+  const status = sunBlocked ? `太阳高 ${sun.alt.toFixed(1)}° · 尚未满足暗夜条件` : fullSky ? '当前时刻 · 地平线以上的天空' : `当前时刻 · 局部天空 ${zoom.toFixed(1)}×`;
   label(status, 7, 12, sunBlocked ? '#9c773e' : '#8390a3');
   canvas.setAttribute('role', 'img');
-  canvas.setAttribute('aria-label', `站址瞬时天空图，天顶居中、北上东左。${out.sourceCount} 个源、${out.starCount} 颗恒星在地平线上。${sunBlocked ? '当前太阳高度不满足暗夜条件。' : ''}图中源编号与轨迹图一致。`);
+  const centre = unprojectHorizontal(x, y);
+  const viewLabel = fullSky ? '全天视图，天顶居中、北上东左' : `${zoom.toFixed(1)} 倍局部视图，视野中心高度 ${centre.alt.toFixed(1)}°、方位 ${centre.az.toFixed(1)}°`;
+  canvas.setAttribute('aria-label', `站址瞬时天空图，${viewLabel}。${out.sourceCount} 个源、${out.starCount} 颗恒星在地平线上。${sunBlocked ? '当前太阳高度不满足暗夜条件。' : ''}图中源编号与轨迹图一致。`);
   return out;
 }

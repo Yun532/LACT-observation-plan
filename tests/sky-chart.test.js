@@ -66,3 +66,44 @@ const hiddenExtensions=renderSiteSky(canvas,{positions:twoPositions,sources:[two
 assert.equal(hiddenExtensions.hits.length,1);
 assert.match(extensionLabel({extension:{kind:'catalog-undefined'}}),/定义见源表/);
 console.log('Instantaneous sky projection checks passed');
+
+// A pan brings the chosen sky position to the viewport centre without enlarging
+// its hit marker, while offscreen objects cannot steal clicks or leave labels.
+const zoomLabels = [], attributes = {};
+context.fillText = text => zoomLabels.push(text);
+const zoomCanvas = { ...canvas, setAttribute: (key, value) => { attributes[key] = value; } };
+const zoomOptions = {
+  positions: { sources: [
+    { id: 'chosen', alt: 36, az: 270 }, { id: 'offscreen', alt: 90, az: 0 },
+    { id: 'bright', alt: 36, az: 270 }, { id: 'offscreen-star', alt: 90, az: 0 },
+  ] },
+  sources: [{ id: 'chosen', name: 'Chosen' }, { id: 'offscreen', name: 'Offscreen source' }],
+  stars: [{ id: 'bright', name: 'Bright', mag: 1 }, { id: 'offscreen-star', name: 'Offscreen star', mag: 1 }],
+  visible: ['chosen', 'offscreen'], focus: 'offscreen',
+};
+const originalView = renderSiteSky(zoomCanvas, zoomOptions);
+zoomLabels.length = 0;
+const zoomedView = renderSiteSky(zoomCanvas, { ...zoomOptions, view: { zoom: 4, x: .6, y: 0 } });
+const chosenHit = zoomedView.hits.find(h => h.id === 'chosen');
+close(chosenHit.x, zoomedView.viewport.centerX); close(chosenHit.y, zoomedView.viewport.centerY);
+assert.equal(chosenHit.r, originalView.hits.find(h => h.id === 'chosen').r, 'Zoom preserves CSS-pixel marker sizes');
+assert.equal(zoomedView.hits.length, 2, 'Only the on-screen source and star remain clickable');
+assert.ok(zoomedView.hits.every(h => h.x >= 0 && h.x <= zoomedView.width && h.y >= 0 && h.y <= zoomedView.height));
+assert.ok(zoomLabels.every(text => !text.includes('Offscreen')), 'Offscreen labels must not be clamped onto the canvas edge');
+assert.equal(zoomedView.sourceCount, 2); assert.equal(zoomedView.starCount, 2); assert.equal(zoomedView.selectedAbove, 2);
+assert.match(attributes['aria-label'], /4.0 倍局部视图/);
+assert.doesNotMatch(attributes['aria-label'], /天顶居中/);
+
+// The lunar mask samples one fixed-resolution viewport, not a 12x hemisphere.
+// Counting spherical evaluations catches expensive offscreen sampling directly.
+const originalSin = Math.sin;
+let sineCalls = 0;
+try {
+  Math.sin = (...args) => { sineCalls++; return originalSin(...args); };
+  const maxZoom = renderSiteSky({ ...canvas }, { positions: { moon: { alt: 90, az: 0 } }, config: { moon: 179 }, view: { zoom: 100 } });
+  assert.equal(maxZoom.viewport.zoom, 12);
+  assert.ok(sineCalls <= 2 * Math.ceil(maxZoom.width / 3) * Math.ceil(maxZoom.height / 3) + 3000, 'Lunar mask work must remain bounded by canvas area at maximum zoom');
+} finally {
+  Math.sin = originalSin;
+}
+console.log('Sky viewport zoom, pan, hit culling and bounded lunar mask checks passed');
