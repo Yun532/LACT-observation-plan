@@ -2,6 +2,8 @@ import './style.css';
 import './atlas.css';
 import './source-info.css';
 import './fermi-explorer.css';
+import './zenith-explorer.css';
+import { createZenithExplorer } from './zenith-explorer.js';
 import { renderSourceInfo, sourceSummary } from './source-info.js';
 import { createFermiExplorer } from './fermi-explorer.js';
 import { computeNight, computeMonth, skyAt, DEFAULTS } from './astronomy.js';
@@ -52,6 +54,7 @@ let fermiRecoveryPending=false;
 const sourceFrame=s=>s.private||String(s.coordinateFrame).startsWith('FK5')?'FK5 / J2000':'ICRS';
 const planFermiIds=p=>[p?.focus,...(Array.isArray(p?.visible)?p.visible:[]),...(Array.isArray(p?.blocks)?p.blocks.map(b=>b?.source):[])].filter(isFermiId);
 const fermi=createFermiExplorer({getContext:()=>({config:S.config,selectedIds:[...fermiIds],focus:source(S.focus)}),onAdd:addFermiSource,onRemove:removeFermiSource,onInspect:sourceDetails});
+const zenithExplorer=createZenithExplorer();
 async function openFermiLibrary(){
   await fermi.open();
   if(fermiRecoveryPending&&fermi.meta){
@@ -126,6 +129,7 @@ function renderCatalogState(){
   $('private-export-note').hidden=!active;
 }
 function activateCatalog(catalog,fingerprint='',remembered=false,{initial=false,discard=false,recovered=false}={}){
+  zenithExplorer.close();
   if(!initial){clearTimeout(toastTimer);$('toast').textContent='';$('toast').hidden=true;}
   if(!initial&&!discard){savePlan();savePreferences();}
   if(recovered)fermiRecoveryPending=false;
@@ -170,8 +174,15 @@ async function importLocalCatalog(file){
 function sourceDetails(id){
   const s=source(id)||fermi.getById(id);if(!s)return;
   $('source-title').textContent=s.name;
-  $('source-details').innerHTML=renderSourceInfo(s);
+  $('source-details').innerHTML=`<div class="source-distribution-action"><button class="secondary-button" data-source-zenith="${esc(s.id)}">天顶角分布 ↗</button><span class="muted">查看全年、整月或单夜的可观测时间分布</span></div>`+renderSourceInfo(s);
   $('source-dialog').showModal();
+}
+function openZenith(id,scope){
+  const s=source(id)||fermi.getById(id);if(!s)return;
+  if(atlas.expanded)expandAtlas(false);
+  const inMonth=$('month-dialog').open&&S.monthSource===id;
+  const date=inMonth?S.monthSelected:S.date;
+  zenithExplorer.open(s,{scope:scope||(inMonth?'month':S.route==='night'?'night':'year'),year:inMonth?S.monthYear:S.route==='night'?Number(date.slice(0,4)):S.year,month:inMonth?S.monthIndex+1:S.route==='night'?Number(date.slice(5,7)):S.month+1,date,config:inMonth?S.monthConfig:S.route==='night'?nightConfig():{...S.config}});
 }
 function renderConditions(){
   $('conditions-summary').textContent=conditions(S.config);
@@ -215,7 +226,7 @@ function renderOverview(){
   const pageItems=items.slice(S.page*S.perPage,(S.page+1)*S.perPage);
   $('source-body').innerHTML=pageItems.map(s=>{
     const monthly=S.annual?.monthly[s.id],p=priority(s.id),recordStatus=['candidate','disputed','private'].includes(s.status)?' · '+statusNames[s.status]:'';
-    return `<tr><td><div class="source-name-cell"><button class="priority-button ${p?'marked':''}" data-priority="${esc(s.id)}" aria-label="${esc(s.name)} 优先级 ${p}，点击切换">${p?'★':'☆'}${p>1?'<small style="font-size:9px">'+p+'</small>':''}</button><button class="source-name" data-open-month="${esc(s.id)}"><strong>${esc(s.name)}</strong><span>${esc(s.catalog)} · ${esc(s.type||'未分类')}${recordStatus}</span></button><button class="source-info-shortcut" data-atlas-info="${esc(s.id)}" aria-label="查看 ${esc(s.name)} 的源表信息" title="源表信息">ⓘ</button></div></td>`+Array.from({length:12},(_,m)=>`<td>${monthly?`<button class="heat-cell ${monthly[m]<.05?'zero':''} ${s.id===S.focus&&m===S.month?'selected':''}" data-cell-source="${esc(s.id)}" data-cell-month="${m}" style="--v:${Math.min(240,monthly[m]/maximum*240).toFixed(1)}" aria-label="${esc(s.name)} ${m+1}月，可观测 ${monthly[m].toFixed(1)} 小时">${monthly[m]<.05?'·':Math.round(monthly[m])}</button>`:'<span class="skeleton-number" aria-label="计算中"></span>'}</td>`).join('')+`<td class="year-total">${monthly?Math.round(sum(monthly)):'—'}</td></tr>`;
+    return `<tr><td><div class="source-name-cell"><button class="priority-button ${p?'marked':''}" data-priority="${esc(s.id)}" aria-label="${esc(s.name)} 优先级 ${p}，点击切换">${p?'★':'☆'}${p>1?'<small style="font-size:9px">'+p+'</small>':''}</button><button class="source-name" data-open-month="${esc(s.id)}"><strong>${esc(s.name)}</strong><span>${esc(s.catalog)} · ${esc(s.type||'未分类')}${recordStatus}</span></button><button class="source-info-shortcut" data-atlas-info="${esc(s.id)}" aria-label="查看 ${esc(s.name)} 的源表信息" title="源表信息">ⓘ</button><button class="source-zenith-shortcut" data-source-zenith="${esc(s.id)}" aria-label="查看 ${esc(s.name)} 的天顶角分布" title="全年、整月与单夜的天顶角分布">天顶角</button></div></td>`+Array.from({length:12},(_,m)=>`<td>${monthly?`<button class="heat-cell ${monthly[m]<.05?'zero':''} ${s.id===S.focus&&m===S.month?'selected':''}" data-cell-source="${esc(s.id)}" data-cell-month="${m}" style="--v:${Math.min(240,monthly[m]/maximum*240).toFixed(1)}" aria-label="${esc(s.name)} ${m+1}月，可观测 ${monthly[m].toFixed(1)} 小时">${monthly[m]<.05?'·':Math.round(monthly[m])}</button>`:'<span class="skeleton-number" aria-label="计算中"></span>'}</td>`).join('')+`<td class="year-total">${monthly?Math.round(sum(monthly)):'—'}</td></tr>`;
   }).join('')||'<tr><td colspan="14"><div class="empty-state">没有匹配的源。试试缩短关键词或调整筛选。</div></td></tr>';
   $('table-summary').textContent=items.length?`${S.page*S.perPage+1}–${Math.min(items.length,(S.page+1)*S.perPage)} / ${items.length} 条 · 点击月份查看逐夜窗口`:'0 条匹配记录';
   $('page-number').textContent=`${S.page+1} / ${pages}`;$('prev-page').disabled=S.page===0;$('next-page').disabled=S.page===pages-1;
@@ -256,7 +267,7 @@ function renderAtlasDetail(){
   const s=source(atlas.inspected);
   if(!s){$('atlas-detail').innerHTML='<span class="eyebrow">SOURCE INSPECTOR</span><h3>选择一个天区目标</h3><p>源列表与上方搜索、目录筛选和排序同步。</p>';return;}
   const monthly=S.annual?.monthly[s.id],g=equatorialToGalactic(s.ra,s.dec),max=Math.max(1,...(monthly||[]));
-  $('atlas-detail').innerHTML=`<div class="atlas-detail-top"><span class="eyebrow">SOURCE INSPECTOR</span><span class="atlas-catalog-tag">${esc(s.catalog)}${s.private?' · 本地':''}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.type||'未分类')}${priority(s.id)?' · '+'★'.repeat(priority(s.id)):''}</p><dl class="atlas-coordinates"><div><dt>RA / Dec</dt><dd>${s.ra.toFixed(3)}° / ${s.dec.toFixed(3)}°</dd></div><div><dt>l / b</dt><dd>${g.l.toFixed(3)}° / ${g.b.toFixed(3)}°</dd></div></dl><div class="atlas-window-values"><div><span>${S.year} 年 ${S.month+1} 月</span><strong>${monthly?monthly[S.month].toFixed(1):'—'}<small> h</small></strong></div><div><span>全年可用</span><strong>${monthly?Math.round(sum(monthly)):'—'}<small> h</small></strong></div></div><div class="atlas-month-bars" aria-label="该源十二个月可观测时长">${Array.from({length:12},(_,m)=>`<button type="button" data-cell-source="${esc(s.id)}" data-cell-month="${m}" aria-label="${esc(s.name)} ${m+1}月 ${monthly?monthly[m].toFixed(1)+'小时':'待计算'}，查看逐夜窗口" title="${m+1}月 · ${monthly?monthly[m].toFixed(1)+' h':'待计算'}"><span style="height:${monthly?Math.max(2,monthly[m]/max*40):2}px" class="${m===S.month?'selected':''}"></span><small>${m+1}</small></button>`).join('')}</div><div class="atlas-detail-actions"><button type="button" class="primary-button" data-atlas-open="${esc(s.id)}">单夜规划 →</button><button type="button" class="text-button" data-atlas-info="${esc(s.id)}">源表信息</button></div><p class="atlas-note">${sourceFrame(s)} · 目录坐标；时长使用当前观测条件。</p>`;
+  $('atlas-detail').innerHTML=`<div class="atlas-detail-top"><span class="eyebrow">SOURCE INSPECTOR</span><span class="atlas-catalog-tag">${esc(s.catalog)}${s.private?' · 本地':''}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.type||'未分类')}${priority(s.id)?' · '+'★'.repeat(priority(s.id)):''}</p><dl class="atlas-coordinates"><div><dt>RA / Dec</dt><dd>${s.ra.toFixed(3)}° / ${s.dec.toFixed(3)}°</dd></div><div><dt>l / b</dt><dd>${g.l.toFixed(3)}° / ${g.b.toFixed(3)}°</dd></div></dl><div class="atlas-window-values"><div><span>${S.year} 年 ${S.month+1} 月</span><strong>${monthly?monthly[S.month].toFixed(1):'—'}<small> h</small></strong></div><div><span>全年可用</span><strong>${monthly?Math.round(sum(monthly)):'—'}<small> h</small></strong></div></div><div class="atlas-month-bars" aria-label="该源十二个月可观测时长">${Array.from({length:12},(_,m)=>`<button type="button" data-cell-source="${esc(s.id)}" data-cell-month="${m}" aria-label="${esc(s.name)} ${m+1}月 ${monthly?monthly[m].toFixed(1)+'小时':'待计算'}，查看逐夜窗口" title="${m+1}月 · ${monthly?monthly[m].toFixed(1)+' h':'待计算'}"><span style="height:${monthly?Math.max(2,monthly[m]/max*40):2}px" class="${m===S.month?'selected':''}"></span><small>${m+1}</small></button>`).join('')}</div><div class="atlas-detail-actions"><button type="button" class="primary-button" data-atlas-open="${esc(s.id)}">单夜规划 →</button><button type="button" class="text-button" data-atlas-info="${esc(s.id)}">源表信息</button><button type="button" class="text-button" data-source-zenith="${esc(s.id)}">天顶角分布</button></div><p class="atlas-note">${sourceFrame(s)} · 目录坐标；时长使用当前观测条件。</p>`;
   $('atlas-detail').querySelector('.atlas-coordinates').insertAdjacentHTML('beforebegin',`<p class="atlas-source-context">${esc(sourceSummary(s))}</p>`);
   if(atlas.mode==='atlas'&&atlas.showFov){
     const inside=S.sources.map(item=>({item,distance:separation(s,item)})).filter(entry=>entry.distance<=S.config.fov+1e-9).sort((a,b)=>a.distance-b.distance);
@@ -556,8 +567,10 @@ function bindEvents(){
     }catch(error){$('catalog-message').textContent=error.message;}finally{catalogBusy=false;}
   };
   $('source-info-button').onclick=()=>sourceDetails(S.focus);$('month-source-info').onclick=()=>sourceDetails(S.monthSource);
+  $('month-zenith').onclick=()=>openZenith(S.monthSource,'month');$('night-zenith').onclick=()=>openZenith(S.focus,'night');
   document.addEventListener('click',event=>{
     const b=event.target.closest('button');if(!b)return;
+    if(b.dataset.sourceZenith){openZenith(b.dataset.sourceZenith);return;}
     if(b.dataset.openFermi!==undefined){if(atlas.expanded)expandAtlas(false);openFermiLibrary();return;}
     if(b.dataset.close!==undefined){b.closest('dialog').close();return;}
     if(b.dataset.route){setRoute(b.dataset.route);return;}

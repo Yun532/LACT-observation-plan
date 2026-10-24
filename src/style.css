@@ -54,6 +54,9 @@
   .catalog-bar [data-open-fermi]{color:#76529c}
   .source-info-shortcut{flex-shrink:0;border:0;background:none;color:#8797ad;padding:5px;font-size:15px}
   .source-info-shortcut:hover{color:var(--blue);background:var(--blue-soft);border-radius:4px}
+  .source-zenith-shortcut{flex-shrink:0;border:0;border-radius:4px;background:#eef4f5;color:#537680;padding:4px 6px;font-size:10px;white-space:nowrap}
+  .source-zenith-shortcut:hover{color:#2c5667;background:#e1edf0}
+  .source-distribution-action{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:18px;font-size:11px}
   .fermi-load-status{flex-basis:100%;color:#94653d;line-height:1.7}
   .catalog-bar.is-private{color:#6e548f}.catalog-bar.is-private>span:before{content:'●';font-size:8px;margin-right:7px}
   .catalog-summary{font-size:13px;color:var(--muted);line-height:1.8}.catalog-import-card{background:var(--bg);padding:22px;border:1px solid var(--line);border-radius:9px;margin:20px 0}.catalog-import-card h3{font-size:16px;margin:0 0 8px}.catalog-import-card p{font-size:13px;color:var(--muted)}

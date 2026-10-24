@@ -1,4 +1,5 @@
 import { MakeTime, Observer, Equator, Horizon, Rotation_EQJ_HOR, SearchAltitude } from 'astronomy-engine';
+import { mask as nightMask, sample as nightSample } from './planning.mjs';
 
 // Geometric planning coordinates. No atmospheric refraction or telescope model.
 export const DEFAULT_SITE = Object.freeze({ latitude: 29.3586111, longitude: 100.1374972, elevation: 4410, timezone: 8 });
@@ -136,7 +137,7 @@ export function angularSeparation(a, b) {
 
 // Midpoint integration over a complete observing day. LACT: local noon to noon;
 // LHAASO: local midnight to midnight, with no solar or lunar cut.
-function dailyHours(date, src, c, observer, step = 10) {
+function dailyHours(date, src, c, observer, step = 10, binCounts = null) {
   const startHour = c.mode === 'LHAASO' ? 0 : 12;
   const startMs = localDateMs(date,c.timezone,startHour), frames = [];
   for (let t = step/2; t < 1440; t += step) frames.push(frameAt(startMs+t*MINUTE,observer,c.mode !== 'LHAASO'));
@@ -157,10 +158,11 @@ function dailyHours(date, src, c, observer, step = 10) {
     if (!usable[i]) continue;
     const f=frames[i], cutMoon=c.mode==='LACT' && (c.moonMode==='strict' || (c.moonMode==='up' && f.moonalt>0));
     for (let j=0;j<src.length;j++) {
-      const v=src[j].v;
-      if (dot(f.zenith,v) < minimumUp) continue;
+      const v=src[j].v, up=dot(f.zenith,v);
+      if (up < minimumUp) continue;
       if (cutMoon && dot(f.moonEqj,v) >= maximumMoonDot) continue;
       hours[j] += step/60;
+      if (binCounts) binCounts[j][zenithBin(Math.acos(clamp(up))/DEG)]++;
     }
   }
   return hours;
@@ -196,4 +198,36 @@ export function computeMonth(year, month, sources, input = {}) {
     src.forEach((s,i)=>daily[s.id].push(hours[i]));
   }
   return {year,month,days,daily,step:10,startHour:c.mode==='LHAASO'?0:12,minutes:1440,mode:c.mode};
+}
+
+// Half-open ten-degree bins, with the final bin including z = 90 degrees.
+const zenithBin=z=>Math.max(0,Math.min(8,Math.floor(z/10)));
+
+export function computeZenithDistribution(query, source, input = {}, progress = () => {}) {
+  if (!query || typeof query!=='object' || !['year','month','night'].includes(query.scope)) throw new Error('未知天顶角分布范围');
+  if (!source || typeof source!=='object' || typeof source.id!=='string' || !source.id) throw new Error('请选择一个有效的源');
+  if (typeof progress!=='function') throw new Error('进度回调必须为函数');
+  const c=normalizeConfig(input),src=vectors([source]),edges=Array.from({length:10},(_,i)=>i*10),counts=Array(9).fill(0);
+  const {scope}=query;
+  if (scope==='night') {
+    // The night workspace always plans LACT observations, including when the
+    // annual catalog is currently shown in the LHAASO mode.
+    c.mode='LACT';
+    const date=query.date,night=computeNight(date,[source],c),usable=nightMask(night,source.id,c);
+    for(let i=0;i<usable.length;i++) if(usable[i]) counts[zenithBin(nightSample(night.sources[source.id].z,i+.5))]++;
+    progress({done:1,total:1,percent:100});
+    return {scope,date,edges,bins:counts.map(n=>n/60),totalHours:counts.reduce((a,b)=>a+b,0)/60,step:1,mode:c.mode,startHour:18,minutes:840};
+  }
+  const year=Number(query.year),month=scope==='month'?Number(query.month):null;
+  if(!Number.isInteger(year)||year<1600||year>2400) throw new Error('支持年份为 1600 至 2400');
+  if(scope==='month'&&(!Number.isInteger(month)||month<1||month>12)) throw new Error('月份必须为 1 至 12');
+  const first=Date.UTC(year,scope==='month'?month-1:0,1),end=scope==='month'?Date.UTC(year,month,1):Date.UTC(year+1,0,1),days=(end-first)/DAY;
+  const observer=new Observer(c.latitude,c.longitude,c.elevation),monthly=Array(12).fill(0);
+  for(let d=0;d<days;d++) {
+    const utc=new Date(first+d*DAY),date=utc.toISOString().slice(0,10);
+    // Reuse the catalog's exact sample times, cuts, trim and addition order.
+    monthly[utc.getUTCMonth()]+=dailyHours(date,src,c,observer,10,[counts])[0];
+    if(d%7===0||d===days-1)progress({done:d+1,total:days,percent:Math.round((d+1)/days*100)});
+  }
+  return {scope,year,...(scope==='month'?{month}:{}),edges,bins:counts.map(n=>n*10/60),totalHours:monthly.reduce((a,b)=>a+b,0),step:10,mode:c.mode,startHour:c.mode==='LHAASO'?0:12,minutes:1440};
 }

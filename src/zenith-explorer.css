@@ -1,0 +1,65 @@
+@layer components {
+  .zenith-dialog {width:740px;padding:27px;--zenith:#3c6d9f;--zenith-soft:#eff5fa}
+  .zenith-heading {display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:17px}
+  .zenith-eyebrow {font-size:9px;letter-spacing:1.7px;color:var(--zenith);margin-bottom:7px}
+  .zenith-heading h2 {font-size:24px;font-weight:550;margin:0}
+  .zenith-heading .icon-button {flex-shrink:0}
+  .zenith-source {display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 13px;margin-bottom:20px;min-width:0}
+  .zenith-source strong {font-size:17px;font-weight:550;overflow-wrap:anywhere}
+  .zenith-source span {font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+  .zenith-controls {display:flex;flex-wrap:wrap;align-items:end;gap:13px}
+  .zenith-controls label {display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--muted);min-width:125px}
+  .zenith-controls input,.zenith-controls select {width:100%;min-width:0;font-size:13px;padding:8px 10px}
+  .zenith-controls input[type=number] {width:145px}
+  .zenith-conditions {font-size:11px;line-height:1.85;color:var(--muted);margin:12px 0 17px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+  .zenith-summary {display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:18px;padding:3px 0 21px}
+  .zenith-summary>div {min-width:0}
+  .zenith-summary>div+div {padding-left:20px;border-left:1px solid var(--line)}
+  .zenith-summary span {font-size:11px;color:var(--muted);display:block;margin-bottom:8px}
+  .zenith-summary strong {display:block;font-size:23px;font-weight:500;letter-spacing:-.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .zenith-summary b {font-weight:500}
+  .zenith-summary strong small {font-size:13px;color:var(--muted)}
+  .zenith-summary em {display:block;font-size:11px;font-style:normal;color:var(--muted);margin-top:5px}
+  .zenith-table {width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px}
+  .zenith-table caption {text-align:left;font-size:10px;font-weight:400;color:var(--muted);caption-side:bottom;padding-top:10px}
+  .zenith-table thead th {font-size:10px;color:var(--muted);font-weight:400;padding:0 0 10px;text-align:left}
+  .zenith-table th:first-child {width:68px}
+  .zenith-table th:nth-child(3) {width:72px}
+  .zenith-table th:nth-child(4) {width:58px}
+  .zenith-table tbody th {font-size:11px;font-weight:400;text-align:left;color:#59677c;padding:8px 0;white-space:nowrap}
+  .zenith-table td {padding:8px 0;font-size:12px;font-variant-numeric:tabular-nums}
+  .zenith-table td:nth-child(2),.zenith-table thead th:nth-child(2) {padding-right:18px}
+  .zenith-table td:nth-child(n+3),.zenith-table thead th:nth-child(n+3) {text-align:right;white-space:nowrap}
+  .zenith-table td:last-child {color:var(--muted);font-size:11px}
+  .zenith-bar {display:block;height:10px;border-radius:3px;background:#f0f3f7;overflow:hidden}
+  .zenith-bar i {display:block;height:100%;background:var(--zenith);border-radius:3px}
+  .zenith-bar i.zenith-bar-high {background:#8ca2b8}
+  .zenith-sampling {font-size:10px;line-height:1.8;color:var(--muted);margin:14px 0 0}
+  .zenith-note {font-size:10px;color:var(--muted);line-height:1.85;padding-top:15px;margin-top:16px;border-top:1px solid var(--line)}
+  .zenith-loading {min-height:290px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--muted);font-size:12px}
+  .zenith-loading progress {width:min(100%,260px);height:5px;accent-color:var(--zenith);border:0;border-radius:3px;overflow:hidden}
+  .zenith-loading progress::-webkit-progress-bar {background:#edf1f6}
+  .zenith-loading progress::-webkit-progress-value {background:var(--zenith)}
+  .zenith-zero {padding:11px 13px;background:var(--zenith-soft);color:#5d7892;font-size:11px;line-height:1.8;border-radius:6px;margin:0 0 18px}
+  .zenith-error {padding:23px 18px;background:#fbf4f1;border-radius:7px;font-size:12px;color:#9d6554;line-height:1.8}
+  .zenith-error p {margin-bottom:13px;overflow-wrap:anywhere}
+  @media(max-width:550px) {
+    .zenith-dialog {padding:20px 16px;max-width:calc(100% - 20px)}
+    .zenith-heading h2 {font-size:22px}
+    .zenith-source {flex-direction:column;gap:5px;margin-bottom:17px}
+    .zenith-source strong {font-size:16px}
+    .zenith-controls {gap:10px}
+    .zenith-controls label {min-width:0;flex:1}
+    .zenith-controls input[type=number] {width:100%}
+    .zenith-summary {gap:10px;grid-template-columns:1.15fr 1fr 1fr}
+    .zenith-summary>div+div {padding-left:10px}
+    .zenith-summary strong {font-size:18px}
+    .zenith-summary span,.zenith-summary em {font-size:10px}
+    .zenith-table th:first-child {width:55px}
+    .zenith-table th:nth-child(3) {width:60px}
+    .zenith-table th:nth-child(4) {width:50px}
+    .zenith-table td:nth-child(2),.zenith-table thead th:nth-child(2) {padding-right:9px}
+    .zenith-table tbody th {font-size:10px}
+    .zenith-table td {font-size:11px}
+  }
+}

@@ -72,7 +72,7 @@
   .atlas-month-bars span.selected{background:#4f819c}
   .atlas-month-bars button:hover span{background:#6b94ab}
   .atlas-month-bars small{font-size:8px;color:#9ba9ad}
-  .atlas-detail-actions{display:flex;align-items:center;gap:13px;margin-top:16px}
+  .atlas-detail-actions{display:flex;flex-wrap:wrap;align-items:center;gap:13px;margin-top:16px}
   .atlas-detail-actions .primary-button{padding:8px 12px;font-size:11px;background:#426e84;border-color:#426e84}
   .atlas-detail-actions .text-button{font-size:11px;color:#738a94}
   .atlas-list-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid #e5eae8;margin-top:22px;padding:17px 0 11px}
