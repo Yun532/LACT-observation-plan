@@ -102,7 +102,7 @@ export function renderSourceInfo(s, { related = [] } = {}) {
   const aliases = [...new Set((Array.isArray(s.aliases) ? s.aliases : []).map(text).filter(v => v && v !== s.name))];
   const associations = [...new Set([...(Array.isArray(s.associations) ? s.associations : []), s.association].filter(present).map(text))];
   const reference = s.private ? null : safeUrl(s.reference);
-  const status = s.private ? '本地私有目录' : s.fermi ? 'LAT 目录记录' : ({ established: '已确认', candidate: '候选', disputed: '有争议', newly_announced: '新发布' }[s.status] || '公开目录');
+  const status = s.custom ? '本机自定义' : s.private ? '本地私有目录' : s.fermi ? 'LAT 目录记录' : ({ established: '已确认', candidate: '候选', disputed: '有争议', newly_announced: '新发布' }[s.status] || '公开目录');
   const spectrumType = f.spectrumType || s.spectrum?.sed_type || s.spectrum?.type;
   const localIndex = spectrumType === 'LogParabola' || /^PLSuperExpCutoff/.test(spectrumType || '');
   const indexLabel = localIndex ? '枢轴处局部指数' : 'Fermi 光子指数';
@@ -128,6 +128,7 @@ export function renderSourceInfo(s, { related = [] } = {}) {
     row('低置信关联 · ASSOC2', f.associationAlt), row('FHL 目录关联', text(f.highEnergyAssociations)),
     row('TeV 关联名称', f.tevAssociation), row('TeVCat 标志', f.tevFlag),
     row('发现仪器', text(s.observatory)), row('发现时间', present(s.discovery) ? discovery(s.discovery) : ''),
+    row('备注', s.custom ? text(s.notes) : ''),
   ])}${card('坐标与形态', [
     row('坐标系', frame), row('RA / Dec', coordinateValue(s.ra, s.dec)), row('规划位置分量', s.coordinateComponent),
     row('空间尺度', extensionValue(s)), row('空间模型', s.spatialType),

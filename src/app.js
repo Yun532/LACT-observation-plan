@@ -3,6 +3,9 @@ import './atlas.css';
 import './source-info.css';
 import './fermi-explorer.css';
 import './zenith-explorer.css';
+import './custom-sources.css';
+import { createCustomSources } from './custom-sources.js';
+import { CUSTOM_CATALOG_KEY, mergeCustomSources, customSourcesForPlan, mergePlanCustomSources, removeCustomPlanReferences, isCustomId } from './custom-catalog.js';
 import { createZenithExplorer } from './zenith-explorer.js';
 import { renderSourceInfo, sourceSummary } from './source-info.js';
 import { createFermiExplorer } from './fermi-explorer.js';
@@ -23,7 +26,7 @@ const hours = minutes => (minutes / 60).toFixed(2) + ' h';
 const sum = values => values.reduce((a,b) => a+b, 0);
 const timezoneLabel = c => 'UTC' + (c.timezone >= 0 ? '+' : '') + c.timezone;
 const today = c => new Date(Date.now() + c.timezone * 3600000).toISOString().slice(0,10);
-const statusNames = {established:'已确认',newly_announced:'新发布',disputed:'有争议',candidate:'候选',private:'本地私有'};
+const statusNames = {established:'已确认',newly_announced:'新发布',disputed:'有争议',candidate:'候选',private:'本地私有',custom:'本机自定义'};
 const SETTINGS_KEY = 'lact.preferences.v1', PLAN_KEY = 'lact.plans.v1';
 const PRESET = {...M.defaults,...DEFAULTS,defaultDuration:60};
 let saved = {}, plans = {}, storageWarned = false;
@@ -36,6 +39,7 @@ config.defaultDuration = Math.max(5,Math.min(600,config.defaultDuration));
 const S = {config, sources:[], meta:{}, byId:new Map(), route:'overview', year:Number(today(config).slice(0,4)), month:Number(today(config).slice(5,7))-1, page:0, perPage:25, filter:'',catalog:'all',status:'published',sort:'month',view:'table', annual:null, worker:null, computeId:0, date:today(config), focus:'',visible:[],cursor:180,night:null,nightKey:'',blocks:[],selected:null,nextId:1,revision:1,history:[],priorities:saved.priorities && typeof saved.priorities==='object' ? saved.priorities : {},monthSource:'',monthYear:2026,monthIndex:0,monthSelected:'',monthData:null};
 let toastTimer, drag = null, assessment = null, renderFrame;
 let publicCatalog=null,privateCatalog=null,privateFingerprint='',catalogRemembered=false,catalogBusy=false;
+let customSources=[],customStoredValue=null,customCatalogStale=false;
 const CLEAR_PRIVATE_KEY='lact.private.clear.v1';
 const clearEpoch=()=>{try{return Number(localStorage.getItem(CLEAR_PRIVATE_KEY))||0;}catch{return 0;}};
 let privateEpoch=clearEpoch();
@@ -52,9 +56,53 @@ const isFermiId=id=>typeof id==='string'&&id.startsWith('fermi:4fgl:');
 const fermiIds=new Set(Array.isArray(saved.fermiIds)?saved.fermiIds.filter(isFermiId):[]);
 let fermiRecoveryPending=false;
 const sourceFrame=s=>s.private||String(s.coordinateFrame).startsWith('FK5')?'FK5 / J2000':'ICRS';
+const planHasCustom=()=>[S.focus,...S.visible,...S.blocks.map(b=>b.source)].some(isCustomId);
 const planFermiIds=p=>[p?.focus,...(Array.isArray(p?.visible)?p.visible:[]),...(Array.isArray(p?.blocks)?p.blocks.map(b=>b?.source):[])].filter(isFermiId);
 const fermi=createFermiExplorer({getContext:()=>({config:S.config,selectedIds:[...fermiIds],focus:source(S.focus)}),onAdd:addFermiSource,onRemove:removeFermiSource,onInspect:sourceDetails});
 const zenithExplorer=createZenithExplorer();
+const customLibrary=createCustomSources({getSources:()=>customSources,onChange:updateCustomSources,onUse:id=>chooseFocus(id,{open:true}),canRemove:customRemovalReason});
+function savedPlanEntries(){
+  return Array.from({length:localStorage.length},(_,i)=>localStorage.key(i)).filter(k=>k===PLAN_KEY||k?.startsWith(PRIVATE_PLAN_PREFIX)).map(key=>[key,readLocalObject(key)]);
+}
+function customRemovalReason(item){
+  if(S.blocks.some(b=>b.source===item.id))return '当前观测任务正在使用，请先移除相关任务。';
+  try{if(savedPlanEntries().some(([,set])=>Object.values(set).some(p=>p?.blocks?.some?.(b=>b?.source===item.id))))return '已保存的观测任务正在使用，请先移除相关任务并保存草稿。';}
+  catch{return '暂时无法检查已保存任务，请检查浏览器存储权限。';}
+  return '';
+}
+function persistCustomSources(next,planChanges=[]){
+  if(localStorage.getItem(CUSTOM_CATALOG_KEY)!==customStoredValue)throw new Error('另一个页面已修改自定义源，请刷新本页后重试。');
+  const serialized=JSON.stringify({version:1,sources:next});
+  const changes=[...planChanges,[CUSTOM_CATALOG_KEY,serialized]],written=[];
+  try{for(const [key,value] of changes){const old=localStorage.getItem(key);localStorage.setItem(key,value);written.push([key,old]);}}
+  catch{
+    for(const [key,old] of written.reverse()){try{if(old===null)localStorage.removeItem(key);else localStorage.setItem(key,old);}catch{/* Retain the in-memory catalog and report failure. */}}
+    throw new Error('浏览器未能保存自定义源；请检查存储空间或权限，当前源表未切换。');
+  }
+  customStoredValue=serialized;customSources=next;
+}
+function customStorageCurrent(){
+  try{if(localStorage.getItem(CUSTOM_CATALOG_KEY)!==customStoredValue)customCatalogStale=true;}catch{return true;}
+  if(customCatalogStale){$('custom-sync-status').hidden=false;return false;}
+  return true;
+}
+function updateCustomSources(records){
+  const next=mergeCustomSources([],records).sources,ids=new Set(next.map(s=>s.id)),removed=customSources.filter(s=>!ids.has(s.id));
+  for(const item of removed){const reason=customRemovalReason(item);if(reason)throw new Error(reason);}
+  const removedIds=new Set(removed.map(s=>s.id));
+  const changes=removed.length?savedPlanEntries().flatMap(([key,set])=>{
+    const cleaned=Object.fromEntries(Object.entries(set).map(([date,plan])=>[date,removeCustomPlanReferences(plan,removedIds)]));
+    return JSON.stringify(cleaned)===JSON.stringify(set)?[]:[[key,JSON.stringify(cleaned)]];
+  }):[];
+  persistCustomSources(next,changes);
+  if(changes.length)plans=readLocalObject(privateCatalog?PRIVATE_PLAN_PREFIX+privateFingerprint:PLAN_KEY);
+  S.history=S.history.filter(entry=>{const p=JSON.parse(entry);return ![p.focus,...(p.visible||[]),...(p.blocks||[]).map(b=>b.source)].some(id=>removedIds.has(id));});
+  for(const id of removedIds)delete S.priorities[id];
+  zenithExplorer.close();
+  for(const id of ['source-dialog','month-dialog','review-dialog','night-picker-dialog'])if($(id).open)$(id).close();
+  $('source-details').replaceChildren();$('night-search-results').replaceChildren();$('night-search-results').hidden=true;
+  refreshWorkingCatalog();savePlan();return true;
+}
 async function openFermiLibrary(){
   await fermi.open();
   if(fermiRecoveryPending&&fermi.meta){
@@ -63,14 +111,14 @@ async function openFermiLibrary(){
   }
 }
 function savedPlanSets(){
-  try{return Array.from({length:localStorage.length},(_,i)=>localStorage.key(i)).filter(k=>k===PLAN_KEY||k?.startsWith(PRIVATE_PLAN_PREFIX)).map(readLocalObject);}catch{return [plans];}
+  try{return savedPlanEntries().map(([,set])=>set);}catch{return [plans];}
 }
 function rebuildWorkingCatalog(){
   const base=combineCatalogs(publicCatalog,privateCatalog),extra=[...fermiIds].map(id=>fermi.getById(id)).filter(Boolean);
-  S.sources=[...base.sources,...extra];S.byId=new Map(S.sources.map(s=>[s.id,s]));
-  S.meta={...base.meta,catalogs:[...(base.meta.catalogs||[]),...(extra.length?[{id:'4FGL-DR4',label:'Fermi 4FGL-DR4 · 已选观测源',recordCount:extra.length,url:'https://fermi.gsfc.nasa.gov/ssc/data/access/lat/14yr_catalog/'}]:[])]};
+  S.sources=[...base.sources,...extra,...customSources];S.byId=new Map(S.sources.map(s=>[s.id,s]));
+  S.meta={...base.meta,catalogs:[...(base.meta.catalogs||[]),...(extra.length?[{id:'4FGL-DR4',label:'Fermi 4FGL-DR4 · 已选观测源',recordCount:extra.length,url:'https://fermi.gsfc.nasa.gov/ssc/data/access/lat/14yr_catalog/'}]:[]),...(customSources.length?[{id:'custom',label:'自定义源 · 本机目录',recordCount:customSources.length}]:[])]};
 }
-function refreshFermiSelection(){
+function refreshWorkingCatalog(){
   rebuildWorkingCatalog();savePreferences();invalidateNight();sky.key='';
   nightPicker.worker?.terminate();Object.assign(nightPicker,{key:'',rows:null,worker:null,error:''});
   S.visible=S.visible.filter(id=>source(id));
@@ -81,14 +129,14 @@ function refreshFermiSelection(){
 }
 async function addFermiSource(id,{openNight=false}={}){
   const item=fermi.getById(id);if(!item)return false;
-  if(!fermiIds.has(id)){fermiIds.add(id);refreshFermiSelection();toast('已加入观测源，可查看全年窗口与单夜轨迹。');}
+  if(!fermiIds.has(id)){fermiIds.add(id);refreshWorkingCatalog();toast('已加入观测源，可查看全年窗口与单夜轨迹。');}
   if(openNight)chooseFocus(id,{open:true});
   return true;
 }
 function removeFermiSource(id){
   if(S.blocks.some(b=>b.source===id)||savedPlanSets().some(set=>Object.values(set).some(p=>Array.isArray(p?.blocks)&&p.blocks.some(b=>b?.source===id)))){toast('这个源仍被观测任务使用；先移除相关任务并保存草稿，再从源库移除。');return false;}
   fermiIds.delete(id);S.history=S.history.filter(entry=>!planFermiIds(JSON.parse(entry)).includes(id));
-  refreshFermiSelection();savePlan();return true;
+  refreshWorkingCatalog();savePlan();return true;
 }
 function toast(message) { $('toast').textContent=message; $('toast').hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').hidden=true,4500); }
 function safeStore(key,value) { try { localStorage.setItem(key,JSON.stringify(value)); } catch { if(!storageWarned){toast('浏览器无法保存本地草稿，请使用“保存草稿”下载计划。');storageWarned=true;} } }
@@ -96,14 +144,16 @@ function savePreferences(){
   if(privateCatalog){if(privateEpoch===clearEpoch())safeStore(PRIVATE_PRIORITY_PREFIX+privateFingerprint,S.priorities);}else saved.priorities=S.priorities;
   safeStore(SETTINGS_KEY,{config:S.config,fermiIds:[...fermiIds],priorities:saved.priorities||{},sky:{showStars:sky.showStars,showNeighborStars:sky.showNeighborStars,showTracks:sky.showTracks,showExtensions:sky.showExtensions}});
 }
-function snapshot(){return {version:1,date:S.date,catalogIdentity:privateCatalog?{private:true,fingerprint:privateFingerprint}:{private:false},config:nightConfig(),blocks:S.blocks.map(b=>({...b})),focus:S.focus,visible:[...S.visible]};}
-function savePlan(){if(fermiRecoveryPending||!S.sources.length||(privateCatalog&&privateEpoch!==clearEpoch()))return;plans[S.date]={...snapshot(),revision:S.revision};safeStore(privateCatalog?PRIVATE_PLAN_PREFIX+privateFingerprint:PLAN_KEY,plans);}
+function snapshot(){const plan={version:1,date:S.date,catalogIdentity:privateCatalog?{private:true,fingerprint:privateFingerprint}:{private:false},config:nightConfig(),blocks:S.blocks.map(b=>({...b})),focus:S.focus,visible:[...S.visible]};const custom=customSourcesForPlan(plan,customSources);return {...plan,...(custom.length?{customSources:custom}:{})};}
+function savePlan(){if(fermiRecoveryPending||!S.sources.length||(privateCatalog&&privateEpoch!==clearEpoch())||!customStorageCurrent())return;plans[S.date]={...snapshot(),revision:S.revision};safeStore(privateCatalog?PRIVATE_PLAN_PREFIX+privateFingerprint:PLAN_KEY,plans);}
 function restoreCatalogPlan(payload){
   if(typeof payload==='string'){if(payload.length>2_000_000)throw new Error('计划文件过大');payload=JSON.parse(payload);}
   checkPlanCatalogIdentity(payload,privateCatalog?privateFingerprint:'');
-  const restored=M.restorePlan(payload,[...S.sources,...fermi.sources]);
+  const custom=mergePlanCustomSources(payload,customSources);
+  const restored=M.restorePlan(payload,[...S.sources,...fermi.sources,...custom]);
   if(restored.config.startHour!==18)throw new Error('本站单夜工作台仅支持18:00起始的计划');
   if(+restored.date.slice(0,4)<2000||+restored.date.slice(0,4)>2100)throw new Error('计划年份需在2000–2100范围内');
+  if(custom.length!==customSources.length)persistCustomSources(custom);
   for(const id of planFermiIds(restored))fermiIds.add(id);
   rebuildWorkingCatalog();return restored;
 }
@@ -114,19 +164,21 @@ function conditions(c){return c.mode==='LHAASO' ? `LHAASO · z ≤ ${c.zmax}° �
 function readLocalObject(key){try{const value=JSON.parse(localStorage.getItem(key)||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}}
 function renderCatalogState(){
   const active=!!privateCatalog;
-  $('catalog-state').textContent=(active?'本地私有 · TeVCat + 2LHAASO':'公开目录 · TeVCat + 1LHAASO')+(fermiRecoveryPending?' · Fermi 待重试':fermiIds.size?` + Fermi × ${fermiIds.size}`:'');
+  $('catalog-state').textContent=(active?'本地私有 · TeVCat + 2LHAASO':'公开目录 · TeVCat + 1LHAASO')+(fermiRecoveryPending?' · Fermi 待重试':fermiIds.size?` + Fermi × ${fermiIds.size}`:'')+(customSources.length?` + 自定义 × ${customSources.length}`:'');
   $('catalog-bar').classList.toggle('is-private',active);
   $('catalog-summary').textContent=active?`已使用本地二期源表，${catalogRemembered?'此设备已记住目录':'仅本次打开有效'}。原始文件和解析数据均不上传。`:'当前使用随网站发布的公开源表。导入私有源表后，仅在本机替换 1LHAASO。';
   $('catalog-notes').hidden=!active;
   $('catalog-notes-list').innerHTML=active?[...(privateCatalog.meta.warnings||[]),...(privateCatalog.meta.notes||[])].map(note=>'<li>'+esc(note)+'</li>').join(''):'';
   $('catalog-revert').disabled=!active;$('catalog-remember').checked=catalogRemembered||!active;
-  $('catalog-foot').textContent=`TeVCat × ${active?'2LHAASO · 本地私有':'1LHAASO'}${fermiIds.size?' × Fermi（已选）':''} · ${S.sources.length} 条记录`;
+  $('catalog-foot').textContent=`TeVCat × ${active?'2LHAASO · 本地私有':'1LHAASO'}${fermiIds.size?' × Fermi（已选）':''}${customSources.length?' × 自定义（本机）':''} · ${S.sources.length} 条记录`;
   document.querySelectorAll('[data-open-fermi]').forEach(b=>b.textContent=`Fermi 扩展源库${fermiIds.size?' · 已选 '+fermiIds.size:''}`);
+  document.querySelectorAll('[data-open-custom]').forEach(b=>b.textContent=`自定义源${customSources.length?' · '+customSources.length:''}`);
   $('fermi-load-status').hidden=!fermiRecoveryPending;
   for(const id of ['catalog-filter','night-picker-catalog']){const old=$(id).value;$(id).innerHTML='<option value="all">全部目录</option>'+[...new Set(S.sources.map(s=>s.catalog))].map(c=>`<option value="${esc(c)}">${esc(c)}${c==='2LHAASO'?' · 本地':''}</option>`).join('');$(id).value=[...$(id).options].some(o=>o.value===old)?old:'all';}
   $('catalog-filter').value=S.catalog;
-  for(const id of ['status-filter','night-picker-status'])$(id).querySelector('[value="published"]').textContent=active?'默认源（含本地）':'已发布源';
-  $('private-export-note').hidden=!active;
+  for(const id of ['status-filter','night-picker-status'])$(id).querySelector('[value="published"]').textContent=active||customSources.length?'默认源（含本地）':'已发布源';
+  $('private-export-note').hidden=!active&&!customSources.length;
+  $('private-export-note').textContent=active?'本地私有目录已启用：导出的计划可能包含非公开源名称、坐标与指向，请仅在获授权的范围内使用。':'计划中使用的自定义源坐标会随文件导出，便于在其他设备恢复。';
 }
 function activateCatalog(catalog,fingerprint='',remembered=false,{initial=false,discard=false,recovered=false}={}){
   zenithExplorer.close();
@@ -152,7 +204,7 @@ function activateCatalog(catalog,fingerprint='',remembered=false,{initial=false,
   $('atlas-picks').hidden=true;$('atlas-readout').textContent='悬停查看坐标与源信息；点击源进入单夜工作台。';
   for(const id of ['source-title','month-title','month-coordinates','month-caption','night-picker-list','night-picker-selected','all-sky'])$(id).replaceChildren();
   $('review-confirm').checked=false;document.querySelectorAll('[data-export]').forEach(b=>b.disabled=true);
-  fermi.refresh();renderCatalogState();renderConditions();
+  fermi.refresh();customLibrary.refresh();renderCatalogState();renderConditions();
   if(!initial){const route=S.route;S.route='night';renderNight();S.route=route;setRoute(route);calculateAnnual();}
 }
 async function importLocalCatalog(file){
@@ -192,6 +244,7 @@ function renderConditions(){
   $('year').value=S.year;
 }
 function setRoute(route){
+  if(route==='night'&&!customStorageCurrent()){route='overview';toast('自定义源已在其他页面更新，已暂停草稿自动保存。请刷新后继续排班。');}
   if(route==='night'&&fermiRecoveryPending){route='overview';toast('Fermi 源库暂未载入。为保留原有草稿，请先打开“Fermi 扩展源库”重试，再进行排班。');}
   if(atlas.expanded&&route==='night')expandAtlas(false);
   S.route=route==='night'?'night':'overview';
@@ -225,7 +278,7 @@ function renderOverview(){
   $('heat-max').textContent=Math.ceil(maximum/10)*10+' h';
   const pageItems=items.slice(S.page*S.perPage,(S.page+1)*S.perPage);
   $('source-body').innerHTML=pageItems.map(s=>{
-    const monthly=S.annual?.monthly[s.id],p=priority(s.id),recordStatus=['candidate','disputed','private'].includes(s.status)?' · '+statusNames[s.status]:'';
+    const monthly=S.annual?.monthly[s.id],p=priority(s.id),recordStatus=['candidate','disputed','private','custom'].includes(s.status)?' · '+statusNames[s.status]:'';
     return `<tr><td><div class="source-name-cell"><button class="priority-button ${p?'marked':''}" data-priority="${esc(s.id)}" aria-label="${esc(s.name)} 优先级 ${p}，点击切换">${p?'★':'☆'}${p>1?'<small style="font-size:9px">'+p+'</small>':''}</button><button class="source-name" data-open-month="${esc(s.id)}"><strong>${esc(s.name)}</strong><span>${esc(s.catalog)} · ${esc(s.type||'未分类')}${recordStatus}</span></button><button class="source-info-shortcut" data-atlas-info="${esc(s.id)}" aria-label="查看 ${esc(s.name)} 的源表信息" title="源表信息">ⓘ</button><button class="source-zenith-shortcut" data-source-zenith="${esc(s.id)}" aria-label="查看 ${esc(s.name)} 的天顶角分布" title="全年、整月与单夜的天顶角分布">天顶角</button></div></td>`+Array.from({length:12},(_,m)=>`<td>${monthly?`<button class="heat-cell ${monthly[m]<.05?'zero':''} ${s.id===S.focus&&m===S.month?'selected':''}" data-cell-source="${esc(s.id)}" data-cell-month="${m}" style="--v:${Math.min(240,monthly[m]/maximum*240).toFixed(1)}" aria-label="${esc(s.name)} ${m+1}月，可观测 ${monthly[m].toFixed(1)} 小时">${monthly[m]<.05?'·':Math.round(monthly[m])}</button>`:'<span class="skeleton-number" aria-label="计算中"></span>'}</td>`).join('')+`<td class="year-total">${monthly?Math.round(sum(monthly)):'—'}</td></tr>`;
   }).join('')||'<tr><td colspan="14"><div class="empty-state">没有匹配的源。试试缩短关键词或调整筛选。</div></td></tr>';
   $('table-summary').textContent=items.length?`${S.page*S.perPage+1}–${Math.min(items.length,(S.page+1)*S.perPage)} / ${items.length} 条 · 点击月份查看逐夜窗口`:'0 条匹配记录';
@@ -260,14 +313,14 @@ function drawAtlasMap(items=filteredSources()){
   $('atlas-fov-radius').value=S.config.fov;
   $('atlas-fov-size').textContent=`直径 ${+(S.config.fov*2).toFixed(3)}° · 与单夜视场共用设置`;
   $('atlas-center-fov').disabled=!source(atlas.inspected);
-  $('atlas-legend').innerHTML=atlas.colorBy==='month'&&!classic?'<span>月度可观测 / h</span><span>0</span><i class="atlas-hours-scale"></i><span>≥ 240</span><span class="atlas-missing-key">灰色：待计算</span>':'<span><i class="atlas-key tev"></i>TeVCat</span><span><i class="atlas-key lhaaso"></i>LHAASO</span><span><i class="atlas-key fermi"></i>Fermi（已选）</span><span class="atlas-missing-key">圆点表示目录位置</span>';
+  $('atlas-legend').innerHTML=atlas.colorBy==='month'&&!classic?'<span>月度可观测 / h</span><span>0</span><i class="atlas-hours-scale"></i><span>≥ 240</span><span class="atlas-missing-key">灰色：待计算</span>':'<span><i class="atlas-key tev"></i>TeVCat</span><span><i class="atlas-key lhaaso"></i>LHAASO</span><span><i class="atlas-key fermi"></i>Fermi（已选）</span>'+ (customSources.length?'<span><i class="atlas-key custom"></i>自定义</span>':'') +'<span class="atlas-missing-key">圆点表示目录位置</span>';
   if(!classic)$('atlas-legend').insertAdjacentHTML('beforeend',(atlas.showReach?`<span title="当前设置：每日过境时满足天顶角条件的范围"><i class="atlas-region-key reach" aria-hidden="true"></i>可观测天区 · z ≤ ${S.config.zmax}°</span>`:'')+(atlas.showLhaaso?'<span title="LHAASO 固定站址，每日过境范围"><i class="atlas-region-key lhaaso-reach" aria-hidden="true"></i>LHAASO · z ≤ 50°</span>':'')+(atlas.showFov&&source(atlas.inspected)?'<span><i class="atlas-region-key fov" aria-hidden="true"></i>目标视场</span>':''));
 }
 function renderAtlasDetail(){
   const s=source(atlas.inspected);
   if(!s){$('atlas-detail').innerHTML='<span class="eyebrow">SOURCE INSPECTOR</span><h3>选择一个天区目标</h3><p>源列表与上方搜索、目录筛选和排序同步。</p>';return;}
   const monthly=S.annual?.monthly[s.id],g=equatorialToGalactic(s.ra,s.dec),max=Math.max(1,...(monthly||[]));
-  $('atlas-detail').innerHTML=`<div class="atlas-detail-top"><span class="eyebrow">SOURCE INSPECTOR</span><span class="atlas-catalog-tag">${esc(s.catalog)}${s.private?' · 本地':''}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.type||'未分类')}${priority(s.id)?' · '+'★'.repeat(priority(s.id)):''}</p><dl class="atlas-coordinates"><div><dt>RA / Dec</dt><dd>${s.ra.toFixed(3)}° / ${s.dec.toFixed(3)}°</dd></div><div><dt>l / b</dt><dd>${g.l.toFixed(3)}° / ${g.b.toFixed(3)}°</dd></div></dl><div class="atlas-window-values"><div><span>${S.year} 年 ${S.month+1} 月</span><strong>${monthly?monthly[S.month].toFixed(1):'—'}<small> h</small></strong></div><div><span>全年可用</span><strong>${monthly?Math.round(sum(monthly)):'—'}<small> h</small></strong></div></div><div class="atlas-month-bars" aria-label="该源十二个月可观测时长">${Array.from({length:12},(_,m)=>`<button type="button" data-cell-source="${esc(s.id)}" data-cell-month="${m}" aria-label="${esc(s.name)} ${m+1}月 ${monthly?monthly[m].toFixed(1)+'小时':'待计算'}，查看逐夜窗口" title="${m+1}月 · ${monthly?monthly[m].toFixed(1)+' h':'待计算'}"><span style="height:${monthly?Math.max(2,monthly[m]/max*40):2}px" class="${m===S.month?'selected':''}"></span><small>${m+1}</small></button>`).join('')}</div><div class="atlas-detail-actions"><button type="button" class="primary-button" data-atlas-open="${esc(s.id)}">单夜规划 →</button><button type="button" class="text-button" data-atlas-info="${esc(s.id)}">源表信息</button><button type="button" class="text-button" data-source-zenith="${esc(s.id)}">天顶角分布</button></div><p class="atlas-note">${sourceFrame(s)} · 目录坐标；时长使用当前观测条件。</p>`;
+  $('atlas-detail').innerHTML=`<div class="atlas-detail-top"><span class="eyebrow">SOURCE INSPECTOR</span><span class="atlas-catalog-tag">${esc(s.catalog)}${s.private||s.custom?' · 本地':''}</span></div><h3>${esc(s.name)}</h3><p>${esc(s.type||'未分类')}${priority(s.id)?' · '+'★'.repeat(priority(s.id)):''}</p><dl class="atlas-coordinates"><div><dt>RA / Dec</dt><dd>${s.ra.toFixed(3)}° / ${s.dec.toFixed(3)}°</dd></div><div><dt>l / b</dt><dd>${g.l.toFixed(3)}° / ${g.b.toFixed(3)}°</dd></div></dl><div class="atlas-window-values"><div><span>${S.year} 年 ${S.month+1} 月</span><strong>${monthly?monthly[S.month].toFixed(1):'—'}<small> h</small></strong></div><div><span>全年可用</span><strong>${monthly?Math.round(sum(monthly)):'—'}<small> h</small></strong></div></div><div class="atlas-month-bars" aria-label="该源十二个月可观测时长">${Array.from({length:12},(_,m)=>`<button type="button" data-cell-source="${esc(s.id)}" data-cell-month="${m}" aria-label="${esc(s.name)} ${m+1}月 ${monthly?monthly[m].toFixed(1)+'小时':'待计算'}，查看逐夜窗口" title="${m+1}月 · ${monthly?monthly[m].toFixed(1)+' h':'待计算'}"><span style="height:${monthly?Math.max(2,monthly[m]/max*40):2}px" class="${m===S.month?'selected':''}"></span><small>${m+1}</small></button>`).join('')}</div><div class="atlas-detail-actions"><button type="button" class="primary-button" data-atlas-open="${esc(s.id)}">单夜规划 →</button><button type="button" class="text-button" data-atlas-info="${esc(s.id)}">源表信息</button><button type="button" class="text-button" data-source-zenith="${esc(s.id)}">天顶角分布</button></div><p class="atlas-note">${sourceFrame(s)} · 目录坐标；时长使用当前观测条件。</p>`;
   $('atlas-detail').querySelector('.atlas-coordinates').insertAdjacentHTML('beforebegin',`<p class="atlas-source-context">${esc(sourceSummary(s))}</p>`);
   if(atlas.mode==='atlas'&&atlas.showFov){
     const inside=S.sources.map(item=>({item,distance:separation(s,item)})).filter(entry=>entry.distance<=S.config.fov+1e-9).sort((a,b)=>a.distance-b.distance);
@@ -376,7 +429,7 @@ function renderNightPicker(){
   $('night-picker-list').innerHTML=rows.map(row=>{
     const s=source(row.id),selected=S.visible.includes(s.id),disabled=selected?S.visible.length===1:S.visible.length>=6;
     const windows=row.windows.map(([a,b])=>`${M.clock(a,c)}–${M.clock(b,c)}`).join(' / ');
-    const extra=['candidate','disputed','private'].includes(s.status)?' · '+statusNames[s.status]:'';
+    const extra=['candidate','disputed','private','custom'].includes(s.status)?' · '+statusNames[s.status]:'';
     return `<div class="night-picker-row ${selected?'is-selected':''}" role="listitem" data-picker-row="${esc(s.id)}"><div class="picker-source"><strong>${esc(s.name)}</strong><small>${esc(s.catalog)} · ${esc(s.type||'未分类')}${extra}</small></div><div class="picker-window"><div class="picker-window-track" aria-hidden="true">${row.windows.map(([a,b])=>`<i style="left:${a/840*100}%;width:${(b-a)/840*100}%"></i>`).join('')}</div><small>${windows||'当前条件下无可用时段'}</small></div><div class="picker-hours">${hours(row.minutes)}<small>${row.minutes} min</small></div><button class="${selected?'quiet-button':'secondary-button'}" data-picker-source="${esc(s.id)}" aria-pressed="${selected}" aria-label="${selected?'移除':'叠加'} ${esc(s.name)}" ${disabled?'disabled':''}>${selected?'已叠加 −':'＋ 叠加'}</button></div>`;
   }).join('')||'<div class="empty-state">没有符合筛选的源。<br>可取消“仅可观测”，或调整目录、关键词与观测条件。</div>';
   if(activeId)[...$('night-picker-list').querySelectorAll('[data-picker-source]')].find(b=>b.dataset.pickerSource===activeId)?.focus({preventScroll:true});
@@ -530,7 +583,7 @@ function openSettings(){
   $('settings-dialog').showModal();
 }
 function download(name,text,type){const url=URL.createObjectURL(new Blob([type.startsWith('text/csv')?'\ufeff':'',text],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function fullPlan(){return {...snapshot(),confidentiality:privateCatalog?'PRIVATE_CATALOG':'PUBLIC_CATALOG',kind:'geometric_planning_not_controller_commands',revision:S.revision,createdAt:new Date().toISOString(),catalogRetrievedAt:S.meta.retrievedAt,fermiCatalog:S.blocks.some(b=>isFermiId(b.source))?{id:'4FGL-DR4',version:fermi.meta?.version,sha256:fermi.meta?.sha256,sourceUrl:fermi.meta?.sourceUrl,retrievedAt:fermi.meta?.retrievedAt}:undefined,resource:'LACT synchronized array / one pointing',tracking:{mode:S.blocks.some(b=>sourceFrame(source(b.source))!=='ICRS')?'CATALOG_SOURCE_CENTER':'ICRS_SOURCE_CENTER',azimuth:'north=0 east=90 degrees',refraction:false,samplingMinutes:10},deviceValidation:'NOT_IMPLEMENTED',sources:[...new Set(S.blocks.map(b=>b.source))].map(id=>{const s=source(id);return {id,name:s.name,ra:s.ra,dec:s.dec,catalog:s.catalog,reference:s.reference,coordinateFrame:s.coordinateFrame||'ICRS',coordinateNote:s.coordinateNote,coordinateComponent:s.coordinateComponent};})};}
+function fullPlan(){return {...snapshot(),confidentiality:privateCatalog?'PRIVATE_CATALOG':planHasCustom()?'LOCAL_CUSTOM_CATALOG':'PUBLIC_CATALOG',kind:'geometric_planning_not_controller_commands',revision:S.revision,createdAt:new Date().toISOString(),catalogRetrievedAt:S.meta.retrievedAt,fermiCatalog:S.blocks.some(b=>isFermiId(b.source))?{id:'4FGL-DR4',version:fermi.meta?.version,sha256:fermi.meta?.sha256,sourceUrl:fermi.meta?.sourceUrl,retrievedAt:fermi.meta?.retrievedAt}:undefined,resource:'LACT synchronized array / one pointing',tracking:{mode:S.blocks.some(b=>sourceFrame(source(b.source))!=='ICRS')?'CATALOG_SOURCE_CENTER':'ICRS_SOURCE_CENTER',azimuth:'north=0 east=90 degrees',refraction:false,samplingMinutes:10},deviceValidation:'NOT_IMPLEMENTED',sources:[...new Set(S.blocks.map(b=>b.source))].map(id=>{const s=source(id);return {id,name:s.name,ra:s.ra,dec:s.dec,catalog:s.catalog,reference:s.reference,coordinateFrame:s.coordinateFrame||'ICRS',coordinateNote:s.coordinateNote,coordinateComponent:s.coordinateComponent};})};}
 function taskRows(){return assessment.sorted.map(b=>({task:b.id,source_id:b.source,source:source(b.source).name,start_utc:M.utc(S.date,b.start,nightConfig()),end_utc_exclusive:M.utc(S.date,b.start+b.duration,nightConfig()),start_local:M.local(S.date,b.start,nightConfig()),end_local_exclusive:M.local(S.date,b.start+b.duration,nightConfig()),duration_min:b.duration,...M.coordinateColumns(source(b.source)),mode:sourceFrame(source(b.source))!=='ICRS'?'CATALOG_SOURCE_CENTER':'ICRS_SOURCE_CENTER'}));}
 function openReview(){
   ensureNight();assessment=M.validate(S.night,S.blocks,nightConfig());if(!S.blocks.length||assessment.issues.length){toast('请先安排任务并解决所有冲突。');return;}
@@ -540,7 +593,7 @@ function openReview(){
 }
 function showAbout(){
   const quality=S.meta.quality||{};
-  $('about-content').innerHTML=`<div class="provenance-block"><h3>目录快照</h3><p>更新日期：${esc(S.meta.retrievedAt?.slice(0,10))}。${S.sources.length} 条目录记录，默认显示 ${S.sources.filter(s=>s.defaultIncluded!==false).length} 条默认记录${privateCatalog?'（含本地非公开目录）':''}。目录记录不等同于独立物理天体。</p><ul>${(S.meta.catalogs||[]).map(c=>`<li>${/^https?:\/\//.test(c.url||'')?'<a href="'+esc(c.url)+'" target="_blank" rel="noopener noreferrer">'+esc(c.label)+'</a>':esc(c.label)}：${c.recordCount} 条${c.componentCount?'，保留 '+c.componentCount+' 个探测器分量':''}。</li>`).join('')}</ul><p>TeVCat 包含已确认、新发布、候选和有争议条目。1LHAASO 主坐标采用已探测分量中 TS 较高者；WCDA 与 KM2A 的分量位置和流强保留在数据文件。</p><h3>计算与时间口径</h3><p>Astronomy Engine 2.1.19；目录 J2000 方向包含岁差与章动变换，日月使用台站位置。高度角不含大气折射，方位角北0°、东90°。全年/逐日以10分钟中点积分，单夜以1分钟计算，边界附近结果受采样分辨率限制。</p><p>LACT 月度统计：当日正午到次日正午；LHAASO：当地00:00到24:00，仅使用天顶角条件。单夜工作台固定为 LACT，展示18:00到次日08:00。跨午夜按观测夜归属统计。使用固定UTC时差，无夏令时自动换算。</p><h3>流强与近邻</h3><p>流强必须结合单位、能段与测量口径使用。${quality.TeVCatMissingFlux||0} 条 TeVCat 流强缺失，不补零。Crab 单位的积分阈值也可能不同，排序仅供目录检索。邻近位置不自动认定为独立源，也不代替扩展源和背景区分析。</p><h3>此刻天空与亮星</h3><p>天顶为中心、地平线为外圈，北上东左。亮星使用全天 V≤8 的 Gaia DR3 / SIMBAD 目录，默认显示 V≤3；Gaia 合成 V 与测量 V 的来源在数据中逐条保留。计数为目录记录数，跨目录或恒星系统分量仍可能重叠。亮星仅用于环境检查，不自动改变观测窗口或估算触发噪声。</p><p>日出日落使用太阳中心 −0.833° 的标准地平线近似，不包括本站山体遮挡；实际暗夜窗采用设置中的太阳阈值。邻近天区默认半径 8°，含原 5° 参考圈及外围 3°；视场圈采用可修改的视场半径。一期 LHAASO r39 实测值画实线、95% 上限画虚线；本地二期高斯源绘制 σ 轮廓，采用 FK5/J2000 坐标，定位误差与展宽分开。TeVCat 未统一定义的角尺度仅列数值，不假定为半径。</p><h3>计划保存与导出</h3><p>参数、优先级与草稿保存在当前浏览器本地。可下载JSON备份并重新导入。导入后始终按当前目录坐标重新检查；导出指向在每个任务中每10分钟采样，并保留结束半开边界。计划不包含天气、机械限位、转速、wobble或控制系统指令。</p><p><a href="https://github.com/Yun532/LACT-observation-plan" target="_blank" rel="noopener">查看源码、完整数据来源及可复现检查 ↗</a></p></div>`;
+  $('about-content').innerHTML=`<div class="provenance-block"><h3>目录快照</h3><p>更新日期：${esc(S.meta.retrievedAt?.slice(0,10))}。${S.sources.length} 条目录记录，默认显示 ${S.sources.filter(s=>s.defaultIncluded!==false).length} 条默认记录${privateCatalog?'（含本地非公开目录）':''}。目录记录不等同于独立物理天体。</p><ul>${(S.meta.catalogs||[]).map(c=>`<li>${/^https?:\/\//.test(c.url||'')?'<a href="'+esc(c.url)+'" target="_blank" rel="noopener noreferrer">'+esc(c.label)+'</a>':esc(c.label)}：${c.recordCount} 条${c.componentCount?'，保留 '+c.componentCount+' 个探测器分量':''}。</li>`).join('')}</ul><p>TeVCat 包含已确认、新发布、候选和有争议条目。1LHAASO 主坐标采用已探测分量中 TS 较高者；WCDA 与 KM2A 的分量位置和流强保留在数据文件。</p><h3>计算与时间口径</h3><p>Astronomy Engine 2.1.19；目录 J2000 方向包含岁差与章动变换，日月使用台站位置。高度角不含大气折射，方位角北0°、东90°。全年/逐日以10分钟中点积分，单夜以1分钟计算，边界附近结果受采样分辨率限制。</p><p>LACT 月度统计：当日正午到次日正午；LHAASO：当地00:00到24:00，仅使用天顶角条件。单夜工作台固定为 LACT，展示18:00到次日08:00。跨午夜按观测夜归属统计。使用固定UTC时差，无夏令时自动换算。</p><h3>流强与近邻</h3><p>流强必须结合单位、能段与测量口径使用。${quality.TeVCatMissingFlux||0} 条 TeVCat 流强缺失，不补零。Crab 单位的积分阈值也可能不同，排序仅供目录检索。邻近位置不自动认定为独立源，也不代替扩展源和背景区分析。</p><h3>此刻天空与亮星</h3><p>天顶为中心、地平线为外圈，北上东左。亮星使用全天 V≤8 的 Gaia DR3 / SIMBAD 目录，默认显示 V≤3；Gaia 合成 V 与测量 V 的来源在数据中逐条保留。计数为目录记录数，跨目录或恒星系统分量仍可能重叠。亮星仅用于环境检查，不自动改变观测窗口或估算触发噪声。</p><p>日出日落使用太阳中心 −0.833° 的标准地平线近似，不包括本站山体遮挡；实际暗夜窗采用设置中的太阳阈值。邻近天区默认半径 8°，含原 5° 参考圈及外围 3°；视场圈采用可修改的视场半径。一期 LHAASO r39 实测值画实线、95% 上限画虚线；本地二期高斯源绘制 σ 轮廓，采用 FK5/J2000 坐标，定位误差与展宽分开。TeVCat 未统一定义的角尺度仅列数值，不假定为半径。</p><h3>自定义源</h3><p>通过独立的自定义源入口输入坐标，或导入 CSV / YAML。自定义目录保存在当前浏览器，追加到已有源表；坐标系支持 FK5/J2000 和 ICRS。未提供的流强和延展保持为空。用到自定义源的草稿会包含其坐标定义，导入计划时验证并恢复；也可单独导出源表备份。</p><h3>计划保存与导出</h3><p>参数、优先级与草稿保存在当前浏览器本地。可下载JSON备份并重新导入。导入后始终按当前目录坐标重新检查；导出指向在每个任务中每10分钟采样，并保留结束半开边界。计划不包含天气、机械限位、转速、wobble或控制系统指令。</p><p><a href="https://github.com/Yun532/LACT-observation-plan" target="_blank" rel="noopener">查看源码、完整数据来源及可复现检查 ↗</a></p></div>`;
   $('about-dialog').showModal();
 }
 function bindEvents(){
@@ -571,6 +624,7 @@ function bindEvents(){
   document.addEventListener('click',event=>{
     const b=event.target.closest('button');if(!b)return;
     if(b.dataset.sourceZenith){openZenith(b.dataset.sourceZenith);return;}
+    if(b.dataset.openCustom!==undefined){if(atlas.expanded)expandAtlas(false);if($('catalog-dialog').open)$('catalog-dialog').close();customLibrary.open();return;}
     if(b.dataset.openFermi!==undefined){if(atlas.expanded)expandAtlas(false);openFermiLibrary();return;}
     if(b.dataset.close!==undefined){b.closest('dialog').close();return;}
     if(b.dataset.route){setRoute(b.dataset.route);return;}
@@ -595,7 +649,7 @@ function bindEvents(){
     if(b.dataset.monthDay){S.monthSelected=b.dataset.monthDay;$('month-days').querySelectorAll('button').forEach(el=>el.classList.toggle('selected',el.dataset.monthDay===S.monthSelected));return;}
     if(b.dataset.searchSource){chooseFocus(b.dataset.searchSource);$('night-search').value='';$('night-search-results').hidden=true;return;}
     if(b.dataset.export&&$('review-confirm').checked){
-      try { const type=b.dataset.export,name=`LACT-${S.date}${privateCatalog?'-PRIVATE':''}-v${S.revision}`;
+      try { const type=b.dataset.export,name=`LACT-${S.date}${privateCatalog?'-PRIVATE':planHasCustom()?'-LOCAL':''}-v${S.revision}`;
         if(type==='json')download(name+'.json',JSON.stringify({...fullPlan(),pointingSamples:M.pointingRows(S.night,S.sources,S.blocks,nightConfig())},null,2),'application/json');
         else download(name+(type==='tasks'?'-tasks.csv':'-pointing.csv'),M.csv(type==='tasks'?taskRows():M.pointingRows(S.night,S.sources,S.blocks,nightConfig())),'text/csv;charset=utf-8');
         toast('已导出几何规划文件。');
@@ -712,7 +766,7 @@ function bindEvents(){
   };
   $('reset-settings').onclick=()=>{for(const el of $('settings-form').elements)if(el.name)el.value=PRESET[el.name];};
   $('review-plan').onclick=openReview;$('review-confirm').onchange=event=>document.querySelectorAll('[data-export]').forEach(b=>b.disabled=!event.target.checked);
-  $('save-draft').onclick=()=>download(`LACT-${S.date}${privateCatalog?'-PRIVATE':''}-draft.json`,JSON.stringify(fullPlan(),null,2),'application/json');
+  $('save-draft').onclick=()=>download(`LACT-${S.date}${privateCatalog?'-PRIVATE':planHasCustom()?'-LOCAL':''}-draft.json`,JSON.stringify(fullPlan(),null,2),'application/json');
   $('import-plan').onclick=()=>$('plan-file').click();
   $('plan-file').onchange=async event=>{
     const file=event.target.files[0];if(!file)return;
@@ -728,13 +782,18 @@ function bindEvents(){
   track.onpointercancel=()=>{drag=null;renderNight();};
   window.addEventListener('resize',()=>{cancelAnimationFrame(renderFrame);renderFrame=requestAnimationFrame(()=>{if(S.route==='night')drawNightCharts();else if(S.view==='sky')drawAtlasMap();});});
   window.addEventListener('hashchange',()=>setRoute(location.hash==='#night'?'night':'overview'));
-  window.addEventListener('storage',event=>{if(event.key===CLEAR_PRIVATE_KEY&&privateCatalog){activateCatalog(null,'',false,{discard:true});toast('另一页面已清除私有数据，本页已切回公开目录。');}});
+  window.addEventListener('storage',event=>{
+    if(event.key===CUSTOM_CATALOG_KEY||event.key===null){if(!customStorageCurrent()){customLibrary.close();if(S.route==='night')setRoute('overview');}}
+    if(event.key===CLEAR_PRIVATE_KEY&&privateCatalog){activateCatalog(null,'',false,{discard:true});toast('另一页面已清除私有数据，本页已切回公开目录。');}
+  });
 }
 async function boot(){
   try {
     const response=await fetch(new URL('data/sources.json',document.baseURI));if(!response.ok)throw new Error('源表载入失败（'+response.status+'）');
     const catalog=await response.json();if(!Array.isArray(catalog.sources)||!catalog.sources.length)throw new Error('源表为空');
     publicCatalog=catalog;let local=null,fingerprint='';
+    try{customStoredValue=localStorage.getItem(CUSTOM_CATALOG_KEY);if(customStoredValue){const stored=JSON.parse(customStoredValue);if(stored?.version!==1||!Array.isArray(stored.sources))throw new Error('invalid');customSources=mergeCustomSources([],stored.sources).sources;}}
+    catch{customSources=[];toast('本机自定义源未能载入；已有数据未删除，可重新导入源表备份。');}
     try{const stored=await localCatalog('read');if(stored&&(!clearEpoch()||stored.savedAt>clearEpoch())){local=parsePrivateCatalog(stored.text,stored.filename);fingerprint=await catalogFingerprint(stored.text);if(clearEpoch()&&!(stored.savedAt>clearEpoch())){local=null;fingerprint='';}}}
     catch{local=null;toast('本机私有目录未能载入，现使用公开目录；可在“管理源表”重新导入。');}
     if(fermiIds.size||savedPlanSets().some(set=>Object.values(set).some(p=>planFermiIds(p).length))){

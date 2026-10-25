@@ -55,3 +55,12 @@ test('flagged catalog flux is not presented as a valid measurement', () => {
   assert.ok(!html.includes('-1 Crab'));
   assert.match(html, />-1<\/span>/);
 });
+
+test('custom coordinates are labeled local, with escaped notes and no invented measurements', () => {
+  const html = renderSourceInfo({ ...base, catalog: '自定义', custom: true, status: 'custom', coordinateFrame: 'FK5/J2000', notes: '<script>private note</script>', flux: null, extension: null });
+  assert.match(html, /本机自定义/);
+  assert.ok(!html.includes('公开目录'));
+  assert.match(html, /备注<\/dt><dd>&lt;script&gt;private note&lt;\/script&gt;/);
+  assert.ok(!html.includes('<script>') && !html.includes('<dt>空间尺度</dt>') && !html.includes('<dt>目录流强</dt>'));
+  assert.match(html, /FK5\/J2000/);
+});
