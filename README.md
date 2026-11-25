@@ -1,5 +1,23 @@
 # LACT 观测规划台
 
+LACT 的公开观测规划网站：查公开目录（TeVCat、1LHAASO、Fermi 4FGL）里的源每个月、每一晚在 LACT 台址（四川稻城，海拔 4410 m）能看多久，看它们在天上的分布和某一晚的天空。
+
+[在线使用](https://yun532.github.io/LACT-observation-plan/) · [旧版排程](https://yun532.github.io/LACT-observation-plan/plan.html)
+
+## 网站结构（2026-11 起）
+
+- **新版（网站首页）**：`public/index.html`。
+  - **源与窗口**：全年窗口、天图、某一晚（台站天空、亮星、邻近源）、源信息、Fermi 4FGL、本地私有目录。“某一晚”里可以手排一晚（演示：只检查暗夜、天顶角、离月、重叠、最短时长和转向），导出任务 CSV、指向 CSV 和计划 JSON。
+  - **示例：全年 · 当夜 · 告警**：只读展示 LACT 排班程序排的一个月（2026 年 11 月），数据在 `public/example/`，是模拟的：告警用真实 GCN 通知，天气、告警审批和执行为模拟，普通源批准量放大 10 倍，不是实际观测。页面顶上有固定的“模拟示例”说明。
+  - 由 LACT 排班工作台的源文件生成，不要直接改这些文件：在工作台仓库运行 `python docs/app-src/build.py --public --out <本仓库>/public/index.html`。同目录的 `catalogs/`、`windows_2026.js`、`windows_2027.js`、`sky_months.js` 和 `example/` 一起生成。
+  - 只含公开目录和几何、观测条件的计算，外加上面的模拟示例；不含实际观测记录，也不含 2LHAASO（示例里的邻源排除区一并去掉；`.gitignore` 照旧排除二期文件）。访客自己的 YAML 源表和手排草稿只存在浏览器里。`tests/public-assets.test.js` 会检查这些。
+- **旧版**：`plan.html` 和 `src/`，旧的单夜工作台，从新版“数据与说明”里能打开。旧链接 `#overview`、`#night` 会落到新版的“源与窗口”。
+- **发布**：推到 `main` 后，GitHub Actions 照旧跑测试和 `npm run build`，把 `dist/` 发到 Pages。旧版从 `plan.html` 构建，新版和它的数据从 `public/` 原样复制。
+
+## 旧版观测规划台（plan.html）
+
+以下是旧版的说明。
+
 面向 LACT 的 TeV 源查询与观测规划网站。先比较每个源的全年观测窗口，再进入同一晚的轨迹、邻近源与任务排班；附带不使用太阳／月亮限制的 LHAASO 几何过境模式。
 
 LHAASO 模式用于年度／月度源表统计；单夜排班与指向输出始终使用 LACT 观测条件。LHAASO 的过境可见性不会被当作望远镜指向任务。

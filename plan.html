@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f5f7fb">
   <meta name="description" content="LACT 观测规划：查询 TeVCat、LHAASO 与可选 Fermi 源，计算全年观测窗口，比较单夜轨迹，安排任务并导出指向计划。">
-  <title>LACT · 观测规划台</title>
+  <title>LACT · 观测规划台（旧版）</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23345fce'/%3E%3Cpath d='M9 7v18h15v-4H13V7z' fill='white'/%3E%3C/svg%3E">
 </head>
 <body>
   <header class="app-header">
     <a class="brand" href="#overview" aria-label="LACT 观测规划首页"><span class="wordmark">LACT<span class="brand-dot">.</span></span><span class="brand-caption">观测规划台<small>OBSERVATION PLANNER</small></span></a>
     <nav class="main-nav" aria-label="主导航"><button class="active" data-route="overview">源与观测窗口</button><button data-route="night">单夜工作台</button></nav>
-    <div class="header-actions"><span id="site-label" class="site-label">稻城 · UTC+8</span><button class="icon-button" id="settings-button" aria-label="观测参数设置"><span aria-hidden="true">⚙</span></button><button class="quiet-button" id="about-button">数据与说明</button></div>
+    <div class="header-actions"><a class="quiet-button" href="./" title="新版观测规划台：源与窗口、天图、某一晚">新版 →</a><span id="site-label" class="site-label">稻城 · UTC+8</span><button class="icon-button" id="settings-button" aria-label="观测参数设置"><span aria-hidden="true">⚙</span></button><button class="quiet-button" id="about-button">数据与说明</button></div>
   </header>
   <main id="app">
     <div id="boot" class="boot"><span class="loading-dot"></span><h1>正在载入观测源表</h1><p>准备目录与天文计算。</p></div>
