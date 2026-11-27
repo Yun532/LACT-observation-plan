@@ -850,6 +850,8 @@ input.hm{width:92px;padding:4px 6px;border:1px solid var(--border2);border-radiu
 .sii-axis span{position:absolute;transform:translateX(-50%)}
 .sii-axis span:first-child{transform:none}
 .sii-table tr.sii-off th,.sii-table tr.sii-off td{color:var(--faint)}
+.mp-msg{margin:0 0 10px;padding:8px 12px;border-radius:8px;background:var(--sunk);font-size:13px}
+.mp-msg.is-bad{color:var(--danger)}
 
 </style>
 </head>
@@ -7855,6 +7857,8 @@ App.acts.wbFocusWindow = id => WBWindows.focusSource(id);
 const WBManual = (() => {
   const KEY = "manual-plans", SNAP = 5 * 6e4, MIN = 6e4;
   let plans = U.store.get(KEY, {}), sel = null, drag = null;
+  // 排入成功或失败的提示写在手排卡里（“源与窗口”这一屏不显示 App.toast），显示一次就清掉
+  let notice = null;
   const cache = new Map();
   const enabled = () => !!globalThis.LACT_PUBLIC;
   const save = () => U.store.set(KEY, plans);
@@ -7863,12 +7867,16 @@ const WBManual = (() => {
   const snap = t => Math.round(t / SNAP) * SNAP;
   const hm = t => U.hm(t);
   // 块里写得下几个字就写几个，写不下的用省略号（中文按 11 px、其他按 6.5 px 估）
+  const textWidth = text => [...String(text)].reduce((w, ch) => w + (ch.charCodeAt(0) > 255 ? 11 : 6.5), 0);
   const fit = (text, px) => { let w = 0, out = ""; for (const ch of String(text)) { w += ch.charCodeAt(0) > 255 ? 11 : 6.5; if (w > px) return out.replace(/\s+$/, "") + "…"; out += ch; } return out; };
   // 颜色按源加进来的先后定，拖动改顺序时不变
   const color = (date, id) => PALETTE[[...new Set((plans[date] || []).map(b => b.src.id))].indexOf(id) % PALETTE.length] || PALETTE[0];
+  // 亮星（56-stars.js 排进来的，src.kind = "star"）按亮星的条件算可见：月光下也行、天顶角和离月另有占位值
+  const isStar = src => src?.kind === "star";
+  const conditions = src => isStar(src) && typeof WBStars !== "undefined" ? WBStars.preview() : WBWindows.preview;
   function geo(date, src) {
-    const key = date + "|" + src.id + "|" + JSON.stringify(WBWindows.preview || null);
-    if (!cache.has(key)) cache.set(key, WBGeo.night(date, [src], WBWindows.preview, true)[0] || null);
+    const pv = conditions(src), key = date + "|" + src.id + "|" + (src.kind || "") + "|" + JSON.stringify(pv || null);
+    if (!cache.has(key)) cache.set(key, WBGeo.night(date, [src], pv, true)[0] || null);
     return cache.get(key);
   }
   // 转向时间：两源角距 ÷ 转速 + 稳定时间（登记表），单位分钟
@@ -7904,7 +7912,8 @@ const WBManual = (() => {
     blocks.forEach((b, i) => {
       const msgs = [], dur = (b.end - b.start) / MIN, g = geo(date, b.src), prev = blocks[i - 1];
       const lost = Math.round(dur - visibleMin(g, b.start, b.end));
-      if (lost > 0) msgs.push(lost >= dur ? "这段时间看不到（暗夜、天顶角或离月）" : `有 ${lost} 分钟看不到`);
+      const why = isStar(b.src) && typeof WBStars !== "undefined" ? `亮星条件：太阳、天顶角 ≤ ${WBStars.COND.zenith}°、离月 ≥ ${WBStars.COND.moon}°` : "暗夜、天顶角或离月";
+      if (lost > 0) msgs.push(lost >= dur ? `这段时间看不到（${why}）` : `有 ${lost} 分钟看不到`);
       if (dur < minVisit()) msgs.push(`短于最短观测 ${minVisit()} 分钟`);
       if (prev) {
         if (b.start < prev.end) msgs.push(`和 ${prev.src.name} 重叠`);
@@ -7920,7 +7929,7 @@ const WBManual = (() => {
 
   function add(date, src) {
     const g = geo(date, src);
-    if (!g?.windows?.length) { App.toast(`${U.esc(src.name)} 这一晚看不到。`); return; }
+    if (!g?.windows?.length) { notice = {bad: true, text: `${src.name} 这一晚看不到（${isStar(src) ? "按亮星条件" : "暗夜、天顶角或离月"}）。`}; redraw(date); return false; }
     const blocks = list(date), len = 60 * MIN, need = minVisit() * MIN;
     const free = (a, b) => blocks.every(x => b + (x.src.id === src.id ? 0 : slew(x.src, src) * MIN) <= x.start || a >= x.end + (x.src.id === src.id ? 0 : slew(x.src, src) * MIN));
     for (const w of g.windows) {
@@ -7929,13 +7938,15 @@ const WBManual = (() => {
         let e = Math.min(s + len, Math.floor(we / SNAP) * SNAP);
         while (e - s >= need && !free(s, e)) e -= SNAP;
         if (e - s >= need && free(s, e)) {
-          const block = {id: Math.random().toString(36).slice(2, 9), src: {id: src.id, name: src.name, ra_deg: src.ra_deg ?? src.ra, dec_deg: src.dec_deg ?? src.dec}, start: s, end: e};
-          (plans[date] ||= []).push(block); sel = block.id; save(); redraw(date);
-          return;
+          const block = {id: Math.random().toString(36).slice(2, 9), src: {id: src.id, name: src.name, ra_deg: src.ra_deg ?? src.ra, dec_deg: src.dec_deg ?? src.dec, ...(isStar(src) ? {kind: "star"} : {})}, start: s, end: e};
+          (plans[date] ||= []).push(block); sel = block.id; save();
+          notice = {text: `已排入 ${src.name}：${hm(s)}—${hm(e)}。`}; redraw(date);
+          return block;
         }
       }
     }
-    App.toast(`${U.esc(src.name)} 能看到的时段里已经没有空位了。`);
+    notice = {bad: true, text: `${src.name} 能看到的时段里已经没有空位了。`}; redraw(date);
+    return false;
   }
 
   function chart(date) {
@@ -7949,6 +7960,8 @@ const WBManual = (() => {
     if (Number.isFinite(de)) s += `<rect x="${X(de)}" y="14" width="${Math.max(0, x1 - X(de))}" height="150" fill="var(--twilight)" opacity=".55"/>`;
     for (const z of [0, 30, 60, 90]) s += `<line x1="${x0}" x2="${x1}" y1="${Y(z)}" y2="${Y(z)}" stroke="var(--rule)"/><text x="${x0 - 6}" y="${Y(z) + 4}" text-anchor="end" class="mp-ax">${z}°</text>`;
     if (U.fin(zmax)) s += `<line x1="${x0}" x2="${x1}" y1="${Y(zmax)}" y2="${Y(zmax)}" stroke="var(--axis)" stroke-dasharray="4 4"/><text x="${x1 - 4}" y="${Y(zmax) - 4}" text-anchor="end" class="mp-ax">天顶角上限 ${zmax}°</text>`;
+    const zStar = blocks.some(x => isStar(x.src)) && typeof WBStars !== "undefined" ? WBStars.COND.zenith : null;
+    if (U.fin(zStar) && zStar !== zmax) s += `<line x1="${x0}" x2="${x1}" y1="${Y(zStar)}" y2="${Y(zStar)}" stroke="var(--axis)" stroke-dasharray="1 3"/><text x="${x1 - 4}" y="${Y(zStar) - 4}" text-anchor="end" class="mp-ax">亮星上限 ${zStar}°</text>`;
     // 计划里每个源的天顶角：细虚线是整夜，粗线是排进去的时段
     for (const id of [...new Set(blocks.map(x => x.src.id))]) {
       const src = blocks.find(x => x.src.id === id).src, g = geo(date, src), c = color(date, id);
@@ -7959,8 +7972,10 @@ const WBManual = (() => {
         const seg = pts.filter(p => p[2] >= blk.start && p[2] <= blk.end);
         if (seg.length > 1) s += `<polyline points="${seg.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ")}" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round"/>`;
       }
-      const top = pts.reduce((m, p) => p[1] < m[1] ? p : m, pts[0]);
-      s += `<text x="${top[0]}" y="${Math.max(24, top[1] - 6)}" text-anchor="middle" class="mp-name" fill="${c}">${U.esc(src.name)}</text>`;
+      // 源名写在最高点上方；按字宽估算，别让名字出了图的左右边
+      const top = pts.reduce((m, p) => p[1] < m[1] ? p : m, pts[0]), half = textWidth(src.name) / 2;
+      const tx = Math.min(x1 - half - 2, Math.max(x0 + half + 2, top[0]));
+      s += `<text x="${tx.toFixed(1)}" y="${Math.max(24, top[1] - 6)}" text-anchor="middle" class="mp-name" fill="${c}">${U.esc(src.name)}</text>`;
     }
     // 时间轴：转向预留（斜纹）和观测块；有问题的块红边
     s += `<rect x="${x0}" y="176" width="${x1 - x0}" height="32" rx="6" fill="var(--sunk)"/>`;
@@ -7992,7 +8007,7 @@ const WBManual = (() => {
       ${blocks.map((b, i) => { const msgs = status.get(b.id) || [];
         return `<tr class="click${b.id === sel ? " sel" : ""}" data-act="mpSel" data-arg="${b.id}"><td class="num">${i + 1}</td><td><i class="mp-dot" style="background:${color(date, b.src.id)}"></i>${U.esc(b.src.name)}</td>
         <td class="num">${hm(b.start)}—${hm(b.end)}</td><td class="num">${Math.round((b.end - b.start) / MIN)}</td>
-        <td class="num">${typeof WBDetect !== "undefined" ? WBDetect.sigmaText(detect(date, b)) : "—"}</td>
+        <td class="num">${isStar(b.src) ? '<span class="muted" title="恒星（强度干涉）不估">恒星</span>' : typeof WBDetect !== "undefined" ? WBDetect.sigmaText(detect(date, b)) : "—"}</td>
         <td>${msgs.length ? `<span class="danger">${U.esc(msgs.join("；"))}</span>` : '<span class="ok">可以</span>'}</td>
         <td><button type="button" class="btn" data-act="mpDel" data-arg="${b.id}" aria-label="删掉第 ${i + 1} 段">删掉</button></td></tr>`; }).join("")}</tbody></table></div>`;
   }
@@ -8016,16 +8031,18 @@ const WBManual = (() => {
 
   function card(date) {
     if (!enabled()) return "";
+    const msg = notice; notice = null;
     const blocks = list(date), status = check(date), bad = [...status.values()].filter(m => m.length).length;
     const total = blocks.reduce((sum, b) => sum + (b.end - b.start) / MIN, 0);
     return `<section class="card mp-card" data-mp-host aria-label="手排这一晚">
       <div class="card-h"><h2>手排这一晚 <span class="tag">演示</span></h2><span class="note">只检查暗夜、天顶角、离月、重叠、最短 ${minVisit()} 分钟和转向时间，不是排班程序的结果；草稿存在这个浏览器里。</span></div>
+      ${msg ? `<p class="mp-msg${msg.bad ? " is-bad" : ""}" role="status">${U.esc(msg.text)}</p>` : ""}
       ${blocks.length ? `<div class="mp-chart" data-mp-chart>${chart(date)}</div>
         <p class="note">拖色块改时间，拖右边缘改时长（每次 5 分钟）。斜纹是两源之间的转向时间，红边的段有问题。</p>
         ${editor(date)}${table(date)}
         <p class="small">${blocks.length} 段，共 ${Math.round(total)} 分钟${bad ? ` · <span class="danger">${bad} 段要改</span>` : " · 全部通过检查"}</p>
         ${sigmaLine(date)}` :
-        '<p class="note">在上面表里源名后点“排入”，这个源就放进这一晚能看到的第一个空档（默认 60 分钟）；之后拖动色块调时间。</p>'}
+        '<p class="note">在上面表里源名后点“排入”（下面的亮星表也可以），这个源就放进这一晚能看到的第一个空档（默认 60 分钟）；之后拖动色块调时间。</p>'}
       <div class="mp-actions">
         ${blocks.length ? `<button type="button" class="btn" data-act="mpExport" data-arg="tasks">导出任务 CSV</button>
         <button type="button" class="btn" data-act="mpExport" data-arg="pointing">导出指向 CSV</button>
@@ -8085,8 +8102,8 @@ const WBManual = (() => {
     const date = WBWindows.night, blocks = list(date), status = check(date);
     if (!blocks.length) return;
     if (kind === "tasks") {
-      download(`LACT_手排_${date}_任务.csv`, csv([["序号", "源", "赤经(°)", "赤纬(°)", "开始(北京时间)", "结束(北京时间)", "开始(UTC)", "结束(UTC)", "时长(分钟)", "检查"],
-        ...blocks.map((b, i) => [i + 1, b.src.name, b.src.ra_deg.toFixed(4), b.src.dec_deg.toFixed(4), bj(b.start), bj(b.end),
+      download(`LACT_手排_${date}_任务.csv`, csv([["序号", "源", "类型", "赤经(°)", "赤纬(°)", "开始(北京时间)", "结束(北京时间)", "开始(UTC)", "结束(UTC)", "时长(分钟)", "检查"],
+        ...blocks.map((b, i) => [i + 1, b.src.name, isStar(b.src) ? "恒星" : "伽马源", b.src.ra_deg.toFixed(4), b.src.dec_deg.toFixed(4), bj(b.start), bj(b.end),
           new Date(b.start).toISOString().slice(0, 19) + "Z", new Date(b.end).toISOString().slice(0, 19) + "Z", Math.round((b.end - b.start) / MIN), (status.get(b.id) || []).join("；") || "可以"])]), "text/csv");
     } else if (kind === "pointing") {
       const rows = [["时间(UTC)", "时间(北京时间)", "源", "赤经(°)", "赤纬(°)", "高度角(°)", "方位角(°)", "天顶角(°)"]];
@@ -8104,12 +8121,22 @@ const WBManual = (() => {
       const doc = {schema: "lact-manual-night", version: 1, night_local_date: date, generated_utc: new Date().toISOString(),
         note: "LACT 观测规划台公开版手排演示：只检查几何条件和时间冲突，不是排班程序的结果",
         site: WBPolicy.get("site"), conditions: {max_zenith_deg: WBWindows.preview?.zenith ?? WBPolicy.get("max_zenith"), moon_sep_deg: WBPolicy.get("moon_sep"), sun_max_deg: WBPolicy.get("dark_def")?.sun_max_deg},
+        ...(blocks.some(b => isStar(b.src)) && typeof WBStars !== "undefined" ? {star_conditions: {max_zenith_deg: WBStars.COND.zenith, moon_sep_deg_when_up: WBStars.COND.moon, sun_max_deg: WBStars.COND.sun, moonlight_ok: true}} : {}),
         blocks: blocks.map(b => ({source: b.src, start_utc: new Date(b.start).toISOString(), end_utc: new Date(b.end).toISOString(), checks: status.get(b.id) || []}))};
       download(`LACT_手排_${date}.json`, JSON.stringify(doc, null, 2), "application/json");
     }
   }
 
   App.acts.mpAdd = id => { const src = WBWindows.row(id); if (src) add(WBWindows.night, src); };
+  // 亮星表里的“排入”：手排卡在上面，排好后提示一下
+  App.acts.mpAddStar = id => {
+    const src = typeof WBStars !== "undefined" ? WBStars.star(id) : null;
+    if (!src) return;
+    add(WBWindows.night, src);
+    // 手排卡在亮星表上面：滚过去看结果（让开顶上固定的页眉）
+    const host = document.querySelector("[data-mp-host]");
+    if (host) window.scrollTo({top: host.getBoundingClientRect().top + window.scrollY - (document.querySelector(".top")?.offsetHeight || 0) - 12, behavior: "smooth"});
+  };
   App.acts.mpSel = id => { sel = id; redraw(); };
   App.acts.mpDel = id => { const date = WBWindows.night; plans[date] = (plans[date] || []).filter(b => b.id !== id); if (sel === id) sel = null; save(); redraw(date); };
   App.acts.mpClear = () => { const date = WBWindows.night; if (!confirm("清空这一晚的手排草稿？")) return; plans[date] = []; sel = null; save(); redraw(date); };
@@ -8133,11 +8160,11 @@ const WBManual = (() => {
       const doc = JSON.parse(await file.text());
       if (doc?.schema !== "lact-manual-night" || !U.isDay(doc.night_local_date) || !Array.isArray(doc.blocks)) throw Error("不是手排计划 JSON");
       plans[doc.night_local_date] = doc.blocks.map(b => ({id: Math.random().toString(36).slice(2, 9),
-        src: {id: String(b.source?.id || b.source?.name), name: String(b.source?.name || b.source?.id), ra_deg: +b.source?.ra_deg, dec_deg: +b.source?.dec_deg},
+        src: {id: String(b.source?.id || b.source?.name), name: String(b.source?.name || b.source?.id), ra_deg: +b.source?.ra_deg, dec_deg: +b.source?.dec_deg, ...(b.source?.kind === "star" ? {kind: "star"} : {})},
         start: U.ms(b.start_utc), end: U.ms(b.end_utc)})).filter(b => U.fin(b.src.ra_deg) && U.fin(b.src.dec_deg) && U.fin(b.start) && U.fin(b.end) && b.end > b.start);
       save(); sel = null;
       App.acts.wiGoNight(doc.night_local_date);
-    } catch (e) { App.toast("导入没成功：" + U.esc(e.message)); }
+    } catch (e) { notice = {bad: true, text: "导入没成功：" + e.message}; redraw(); }
   };
   return {enabled, card};
 })();
@@ -9798,8 +9825,8 @@ const WBStars = (() => {
   const LIMITS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
   const PAGE = 40;
   // 常用中文名（只给最亮的一些）
-  const CN = {"alf CMa": "天狼星", "alf Car": "老人星", "alf Cen": "南门二", "alf Boo": "大角星", "alf Lyr": "织女星", "alf Aur": "五车二",
-    "bet Ori": "参宿七", "alf CMi": "南河三", "alf Eri": "水委一", "alf Ori": "参宿四", "bet Cen": "马腹一", "alf Aql": "牛郎星",
+  const CN = {"alf CMa": "天狼星", "alf Car": "老人星", "alf Cen": "南门二", "alf Boo": "大角星", "alf Lyr": "织女一（织女星）", "alf Aur": "五车二",
+    "bet Ori": "参宿七", "alf CMi": "南河三", "alf Eri": "水委一", "alf Ori": "参宿四", "bet Cen": "马腹一", "alf Aql": "河鼓二（牛郎星）",
     "alf Cru": "十字架二", "alf Tau": "毕宿五", "alf Vir": "角宿一", "alf Sco": "心宿二", "bet Gem": "北河三", "alf PsA": "北落师门",
     "bet Cru": "十字架三", "alf Cyg": "天津四", "alf Leo": "轩辕十四", "eps CMa": "弧矢七", "alf Gem": "北河二", "gam Cru": "十字架一",
     "lam Sco": "尾宿八", "gam Ori": "参宿五", "bet Tau": "五车五", "bet Car": "南船五", "eps Ori": "参宿二", "alf Gru": "鹤一",
@@ -9893,18 +9920,20 @@ const WBStars = (() => {
     const shown = (state.invisible ? state.rows : seen).slice().sort((a, b) => value(a) - value(b) || a.star.mag - b.star.mag);
     const page = shown.slice(0, PAGE * state.page);
     const span = WBPolicy.bounds(date).map(t => U.hm(new Date(t).toISOString()));
+    const plan = typeof WBManual !== "undefined" && WBManual.enabled();   // 公开版才有手排
     const info = [ev.darkStart && ev.darkEnd ? `天黑 ${U.hm(ev.darkStart)}—${U.hm(ev.darkEnd)}（太阳低于 ${deg(COND.sun)}）` : "这一晚没有太阳低于 " + deg(COND.sun) + " 的时段", m,
       `条件（占位）：天顶角 ≤ ${COND.zenith}°，月亮在地平线上时离月 ≥ ${COND.moon}°`].filter(Boolean).join(" · ");
     return head + controls + `<p class="note">${U.esc(info)}</p>
       ${shown.length ? `<div class="scroll-x win-table-wrap"><table class="win-table sii-table"><thead><tr><th>星</th><th class="num">V</th>
         <th class="win-trackcell">可见时段 <span class="muted" style="font-weight:400">${span.join("—")}</span>${axis(date)}</th>
-        <th class="num">时长</th><th class="num" title="可见时段里天顶角最小（星最高）的时刻">最小天顶角</th><th class="num">最小离月</th></tr></thead><tbody>
+        <th class="num">时长</th><th class="num" title="可见时段里天顶角最小（星最高）的时刻">最小天顶角</th><th class="num">最小离月</th>${plan ? "<th></th>" : ""}</tr></thead><tbody>
         ${page.map(r => `<tr${r.geometry_min > 0 ? "" : ' class="sii-off"'}>
           <th scope="row">${U.esc(label(r.star))}</th><td class="num">${U.n(r.star.mag, 2)}</td>
           <td class="win-trackcell">${track(r)}<span class="tiny muted num">${r.windows?.length ? U.esc(r.windows.map(w => U.span(w.start_utc, w.end_utc)).join("、")) : U.esc(r.blocking || "看不到")}</span></td>
           <td class="num">${r.geometry_min > 0 ? dur(r.geometry_min) : "—"}</td>
           <td class="num" title="可见时段里天顶角最小的时刻">${U.fin(r.best_zenith_deg) ? `${U.n(r.best_zenith_deg, 0)}° · ${U.hm(r.best_utc)}` : "—"}</td>
-          <td class="num">${U.fin(r.min_moon_sep_deg) ? U.n(r.min_moon_sep_deg, 0) + "°" : "—"}</td></tr>`).join("")}</tbody></table></div>` :
+          <td class="num">${U.fin(r.min_moon_sep_deg) ? U.n(r.min_moon_sep_deg, 0) + "°" : "—"}</td>
+          ${plan ? `<td>${r.geometry_min > 0 ? `<button type="button" class="btn" data-act="mpAddStar" data-arg="${U.esc(r.id)}" title="放进上面“手排这一晚”的第一个空档">排入</button>` : ""}</td>` : ""}</tr>`).join("")}</tbody></table></div>` :
         `<p class="note">V ≤ ${state.vmax} 的亮星这一晚都看不到。</p>`}
       <div class="win-pagination"><span class="muted">全天 V ≤ ${state.vmax} 共 ${state.total} 颗，这一晚能看 ${seen.length} 颗 · 页面计算，1 分钟步长</span><span class="win-grow"></span>
         ${page.length < shown.length ? `<button type="button" class="btn" data-act="siiMore">再显示 ${Math.min(PAGE, shown.length - page.length)} 颗</button>` : ""}</div>`;
@@ -9915,7 +9944,12 @@ const WBStars = (() => {
   App.acts.siiInvisible = (v, el) => { state.invisible = !!el?.checked; state.page = 1; App.render("windowStars"); };
   App.acts.siiMore = () => { state.page++; App.render("windowStars"); };
   App.acts.siiOpen = () => { state.open = !state.open; App.render("windowStars"); };
-  return {card, COND};
+  // 给手排用：可见条件，和按 id 取一颗星（名字用表里同样的写法）
+  function star(id) {
+    const s = (WBAtlas.starRows() || []).find(x => x.id === id);
+    return s ? {id: s.id, name: label(s), ra_deg: s.ra_deg ?? s.ra, dec_deg: s.dec_deg ?? s.dec, kind: "star", mag: s.mag} : null;
+  }
+  return {card, COND, preview, star};
 })();
 
 App.init();
