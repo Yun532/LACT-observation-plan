@@ -708,6 +708,15 @@ input.hm{width:92px;padding:4px 6px;border:1px solid var(--border2);border-radiu
 .win-mh[aria-pressed=true]{color:var(--ink);font-weight:700}
 .win-table thead th:first-child .win-mh{font-size:12px}
 .win-total{font-weight:600}
+.win-year td.win-t5{color:var(--ink2);border-radius:6px;padding-left:12px}
+.win-year td.win-t5.is-long,.win-year td.win-t5.is-none{color:var(--faint)}
+.win-year th.win-t5h{padding-left:12px}
+.dt-how{margin-top:4px}
+.dt-how>summary{cursor:pointer;font-size:12px;color:var(--muted);list-style:none}
+.dt-how>summary::-webkit-details-marker{display:none}
+.dt-how>summary::before{content:"▸ "}
+.dt-how[open]>summary::before{content:"▾ "}
+.dt-how>summary:hover{color:var(--ink)}
 .win-starcell{white-space:nowrap;padding-inline:2px!important}
 .win-focus{border:0;background:none;cursor:pointer;color:var(--axis);font-size:15px;line-height:1;padding:4px}
 .win-focus:hover{color:var(--warn)}
@@ -832,6 +841,16 @@ input.hm{width:92px;padding:4px 6px;border:1px solid var(--border2);border-radiu
 .mp-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .mp-upload input{display:none}
 
+/* 这一晚能看哪些亮星（56-stars.js） */
+.card-h.sii-head{justify-content:flex-start;gap:6px 10px;margin-bottom:0}
+.sii-head .win-grow{flex:1}
+[data-part="windowStars"] .sii-head + .note{margin-top:8px}
+.sii-table th[scope=row]{font-weight:500;white-space:nowrap}
+.sii-axis{display:block;position:relative;height:14px;margin-top:4px;font-weight:400;font-size:11px;color:var(--muted)}
+.sii-axis span{position:absolute;transform:translateX(-50%)}
+.sii-axis span:first-child{transform:none}
+.sii-table tr.sii-off th,.sii-table tr.sii-off td{color:var(--faint)}
+
 </style>
 </head>
 <body>
@@ -840,7 +859,7 @@ input.hm{width:92px;padding:4px 6px;border:1px solid var(--border2);border-radiu
 <div id="overlay"></div>
 <!-- 最新结果只加载小索引；各分卷和历史包在选择时才加载。 -->
 <script>
-globalThis.LACT_REGISTRY={"registry":"lact-params","version":"public","groups":[{"id":"array","items":[{"id":"camera","name":"相机","value":"1616 个 SiPM 像素，像素约 0.19°，视场约 8°（半径约 4°）","code":{"fov_radius_deg":4.0,"pixel_deg":0.19},"source":"文献","ref":"CPC26"}]},{"id":"drive","items":[{"id":"slew_speed","name":"转向最大速度","value":1.0,"source":"文献","ref":"TEL1","unit":"°/s（方位、俯仰都是）"},{"id":"slew_settle","name":"转向后稳定时间","value":30,"source":"占位","ref":null,"unit":"s"},{"id":"tau_switch","name":"拆阵 / 合阵耗时","value":4.0,"source":"占位","ref":null,"unit":"min"},{"id":"run_length","name":"最长 run","value":28,"source":"占位","ref":null,"unit":"min"},{"id":"min_visit","name":"最短访问","value":10,"source":"占位","ref":null,"unit":"min"},{"id":"min_run","name":"最短 run","value":5,"source":"占位","ref":null,"unit":"min"}]},{"id":"conditions","items":[{"id":"site","name":"台址","value":"北纬 29.3586°，东经 100.1375°，海拔 4410 m","code":{"lat_deg":29.3586111,"lon_deg":100.1374972,"height_m":4410.0},"source":"用户","ref":"PROJ"},{"id":"max_zenith","name":"最大天顶角","value":70,"source":"文献","ref":"CPC26","unit":"°"},{"id":"moon_sep","name":"离月距离下限","value":40,"source":"占位（用户 11-03 定）","ref":"CPC26","unit":"°"},{"id":"dark_def","name":"暗夜定义","value":"太阳低于 -13°，月亮可在天上，目标离月不少于40°","code":{"sun_max_deg":-13.0,"moon_max_alt_deg":90.0},"source":"占位（用户 11-03 定）","ref":null},{"id":"rainy","name":"雨季（不运行）","value":[5,6,7,8,9],"source":"文献","ref":"CPC26","unit":"月"},{"id":"obs_fraction","name":"每月可观测天数占比","value":{"1":0.66,"2":0.66,"3":0.66,"4":0.66,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0.66,"11":0.66,"12":0.66},"source":"文献推算","ref":"MIL24"}]},{"id":"performance","items":[{"id":"eth_f32","name":"整阵能阈（分析级）","value":{"20":0.92,"40":0.72,"60":1.48},"source":"文献","ref":"CPC26","unit":"TeV，按天顶角"},{"id":"eth_8","name":"8 台组能阈（分析级）","value":{"20":3.33,"40":2.43,"60":1.78},"source":"文献","ref":"CPC26","unit":"TeV，按天顶角"},{"id":"qual_rule","name":"资格规则","value":"天顶角 ≤ 70°，且该状态在此天顶角的能阈 ≤ 任务能段上限","code":{"edge":"upper"},"source":"默认","ref":null}]},{"id":"methods","items":[{"id":"wobble","name":"wobble 偏置、ON 半径、邻源排除半径、最少 OFF 数","value":"0.5°、0.12°、0.30°、3","code":{"offset_deg":0.5,"on_radius_deg":0.12,"exclusion_radius_deg":0.3,"min_off":3,"directions_deg":[0,90,180,270]},"source":"占位","ref":null}]},{"id":"policy","items":[{"id":"pref_zenith","name":"整阵 / 四子阵默认偏好分界","value":50,"source":"文献","ref":"MIL24","unit":"°"}]},{"id":"sample10_display","items":[{"id":"catalog_import","name":"目录预填与补空建议","value":{"energy_tev":{"lhaaso_wcda":[1,25],"lhaaso_km2a":[25,100],"tevcat":[0.3,10],"fermi_fhl":[0.1,1]},"gaussian_sigma_multiplier":2,"default_tier":3,"min_gap_min":15,"nearby_margin_deg":0.3,"top_n":20},"source":"占位"},{"id":"window_display","name":"窗口对照口径","value":{"lhaaso_zenith_max_deg":50,"utc_offset_hours":8,"night_start_local_hour":18,"night_end_local_hour":8,"window_step_min":1,"heat_scale_max_hours":240,"neighbour_radius_deg":5,"neighbour_padding_deg":3,"star_max_mag":8},"source":"用户"},{"id":"summer_sky","name":"主要在雨季可观测的天区","value":{"months":[5,6,7,8,9],"share_threshold":0.5},"source":"月份占位；比例门槛为用户 2026-11-24 决定"}]},{"id":"sample9_policy","items":[{"id":"layout_policy","name":"延展源布局与有效视场","value":{"usable_radius_deg":2.0,"design_kernel":"pessimistic"},"source":"占位"}]}],"refs":{"CPC26":{"title":"Design of LACT detector layout and expectation for gamma-ray sources observation, Chinese Physics C 50(7) 075001 (2026)","url":"https://csnsdoc.ihep.ac.cn/article/doi/10.1088/1674-1137/ae5c6f"},"MIL24":{"title":"LACT: Progress and Future Plans, S. Zhang, Gamma 2024 Milano (slides)","url":"https://indico.ict.inaf.it/event/2661/contributions/19102/attachments/8820/18120/LACT-%CE%B3-2024-Milano.pdf"},"TEL1":{"title":"Performance and Characteristics of the First LACT Telescope, Y. Wang (slides)","url":"https://indico-cdex.ep.tsinghua.edu.cn/event/175/contributions/2177/attachments/1079/1651/Performance%20and%20Characteristics%20of%20the%20first%20LACT%20telescope.pdf"},"PROJ":{"title":"用户项目文件（LACT-observation-plan-next）","url":null}}};
+globalThis.LACT_REGISTRY={"registry":"lact-params","version":"public","groups":[{"id":"array","items":[{"id":"camera","name":"相机","value":"1616 个 SiPM 像素，像素约 0.19°，视场约 8°（半径约 4°）","code":{"fov_radius_deg":4.0,"pixel_deg":0.19},"source":"文献","ref":"CPC26"}]},{"id":"drive","items":[{"id":"slew_speed","name":"转向最大速度","value":1.0,"source":"文献","ref":"TEL1","unit":"°/s（方位、俯仰都是）"},{"id":"slew_settle","name":"转向后稳定时间","value":30,"source":"占位","ref":null,"unit":"s"},{"id":"tau_switch","name":"拆阵 / 合阵耗时","value":4.0,"source":"占位","ref":null,"unit":"min"},{"id":"run_length","name":"最长 run","value":28,"source":"占位","ref":null,"unit":"min"},{"id":"min_visit","name":"最短访问","value":10,"source":"占位","ref":null,"unit":"min"},{"id":"min_run","name":"最短 run","value":5,"source":"占位","ref":null,"unit":"min"}]},{"id":"conditions","items":[{"id":"site","name":"台址","value":"北纬 29.3586°，东经 100.1375°，海拔 4410 m","code":{"lat_deg":29.3586111,"lon_deg":100.1374972,"height_m":4410.0},"source":"用户","ref":"PROJ"},{"id":"max_zenith","name":"最大天顶角","value":70,"source":"文献","ref":"CPC26","unit":"°"},{"id":"moon_sep","name":"离月距离下限","value":40,"source":"占位（用户 11-03 定）","ref":"CPC26","unit":"°"},{"id":"dark_def","name":"暗夜定义","value":"太阳低于 -13°，月亮可在天上，目标离月不少于40°","code":{"sun_max_deg":-13.0,"moon_max_alt_deg":90.0},"source":"占位（用户 11-03 定）","ref":null},{"id":"rainy","name":"雨季（不运行）","value":[5,6,7,8,9],"source":"文献","ref":"CPC26","unit":"月"},{"id":"obs_fraction","name":"每月可观测天数占比","value":{"1":0.66,"2":0.66,"3":0.66,"4":0.66,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0.66,"11":0.66,"12":0.66},"source":"文献推算","ref":"MIL24"}]},{"id":"performance","items":[{"id":"eth_f32","name":"整阵能阈（分析级）","value":{"20":0.92,"40":0.72,"60":1.48},"source":"文献","ref":"CPC26","unit":"TeV，按天顶角"},{"id":"eth_8","name":"8 台组能阈（分析级）","value":{"20":3.33,"40":2.43,"60":1.78},"source":"文献","ref":"CPC26","unit":"TeV，按天顶角"},{"id":"w_table","name":"折算比 w（一个 8 台组 ÷ 整阵，同天顶角）","value":{"20":0.5,"40":0.5,"60":0.8,"70":0.8},"source":"文献推算","ref":"CPC26","unit":"按天顶角线性插值"},{"id":"qual_rule","name":"资格规则","value":"天顶角 ≤ 70°，且该状态在此天顶角的能阈 ≤ 任务能段上限","code":{"edge":"upper"},"source":"默认","ref":null}]},{"id":"methods","items":[{"id":"wobble","name":"wobble 偏置、ON 半径、邻源排除半径、最少 OFF 数","value":"0.5°、0.12°、0.30°、3","code":{"offset_deg":0.5,"on_radius_deg":0.12,"exclusion_radius_deg":0.3,"min_off":3,"directions_deg":[0,90,180,270]},"source":"占位","ref":null}]},{"id":"policy","items":[{"id":"pref_zenith","name":"整阵 / 四子阵默认偏好分界","value":50,"source":"文献","ref":"MIL24","unit":"°"}]},{"id":"sample10_display","items":[{"id":"catalog_import","name":"目录预填与补空建议","value":{"energy_tev":{"lhaaso_wcda":[1,25],"lhaaso_km2a":[25,100],"tevcat":[0.3,10],"fermi_fhl":[0.1,1]},"gaussian_sigma_multiplier":2,"default_tier":3,"min_gap_min":15,"nearby_margin_deg":0.3,"top_n":20},"source":"占位"},{"id":"window_display","name":"窗口对照口径","value":{"lhaaso_zenith_max_deg":50,"utc_offset_hours":8,"night_start_local_hour":18,"night_end_local_hour":8,"window_step_min":1,"heat_scale_max_hours":240,"neighbour_radius_deg":5,"neighbour_padding_deg":3,"star_max_mag":8},"source":"用户"},{"id":"summer_sky","name":"主要在雨季可观测的天区","value":{"months":[5,6,7,8,9],"share_threshold":0.5},"source":"月份占位；比例门槛为用户 2026-11-24 决定"}]},{"id":"sample9_policy","items":[{"id":"layout_policy","name":"延展源布局与有效视场","value":{"usable_radius_deg":2.0,"design_kernel":"pessimistic"},"source":"占位"}]}],"refs":{"CPC26":{"title":"Design of LACT detector layout and expectation for gamma-ray sources observation, Chinese Physics C 50(7) 075001 (2026)","url":"https://csnsdoc.ihep.ac.cn/article/doi/10.1088/1674-1137/ae5c6f"},"MIL24":{"title":"LACT: Progress and Future Plans, S. Zhang, Gamma 2024 Milano (slides)","url":"https://indico.ict.inaf.it/event/2661/contributions/19102/attachments/8820/18120/LACT-%CE%B3-2024-Milano.pdf"},"TEL1":{"title":"Performance and Characteristics of the First LACT Telescope, Y. Wang (slides)","url":"https://indico-cdex.ep.tsinghua.edu.cn/event/175/contributions/2177/attachments/1079/1651/Performance%20and%20Characteristics%20of%20the%20first%20LACT%20telescope.pdf"},"PROJ":{"title":"用户项目文件（LACT-observation-plan-next）","url":null}}};
 globalThis.LACT_PUBLIC=true;
 globalThis.LACT_PUBLIC_EXAMPLE={"id": "example", "label": "模拟示例", "short": "模拟示例", "note": "2026 年 11 月的模拟示例：告警用的是真实 GCN 通知，天气、告警审批和执行都是模拟的，普通源的批准量放大了 10 倍。这不是 LACT 的实际观测。", "index": "example/results_latest.js"};
 /* ==== astronomy-engine-2.1.19.js ==== */
@@ -1733,6 +1752,8 @@ const WBCatalog = {
       if (!Array.isArray(rows)) throw Error("目录格式未提供");
       WBCatalog.cache[key]=rows.map(s=>WBCatalog.canonical(s));
       (WBCatalog.meta ||= {})[key]=doc?.meta || null;
+      // 1LHAASO 的谱另存一份：被 2LHAASO 替换后，“打到 5σ”的估计仍从这里取流强（WBDetect）
+      if (key==="sources") WBCatalog.lhaaso1=WBCatalog.cache[key].filter(s=>s.catalog==="1LHAASO");
       // 有 2LHAASO 时用它替换公开表里的 1LHAASO
       if (key==="sources" && WBCatalog.lhaaso2().length)
         WBCatalog.cache[key]=[...WBCatalog.cache[key].filter(s=>s.catalog!=="1LHAASO"), ...WBCatalog.lhaaso2()];
@@ -1980,6 +2001,7 @@ App.screens.catalog_source={
   parts:{
     windowDetails:()=>WBWindows.pagePart("windowDetails","catalog"),
     windowZenith:()=>WBWindows.pagePart("windowZenith","catalog"),
+    windowDetect:()=>WBWindows.pagePart("windowDetect","catalog"),
     windowNights:()=>WBWindows.pagePart("windowNights","catalog"),
   },
   mount(){
@@ -6370,6 +6392,7 @@ App.screens.source = Object.assign({}, App.screens.source, {
   parts: {
     windowDetails: () => WBWindows.pagePart("windowDetails", "task"),
     windowZenith: () => WBWindows.pagePart("windowZenith", "task"),
+    windowDetect: () => WBWindows.pagePart("windowDetect", "task"),
     windowNights: () => WBWindows.pagePart("windowNights", "task"),
   },
   render(id){
@@ -6498,6 +6521,434 @@ App.screens.source = Object.assign({}, App.screens.source, {
   }
 });
 App.screens.annual_source = App.screens.source;
+
+/* ==== 50-lhaaso-lit.js ==== */
+"use strict";
+/* LHAASO 文献对应体（11-26 起，用户定：LHAASO 视场内、目录里找不到 LHAASO 对应体的源，查文章找对应体，统一用 LHAASO 的量）。
+   只给“打到 5σ”的估计和源卡说明用，不进目录表、不画在天图上；都是公开文献，公开版也带。
+   以后查到新的对应体就往这里加一行。
+   字段：
+     name         LHAASO 文章里的源名
+     counterparts 对应的目录源名（按名称或别名对上；也认 name 本身）
+     ra, dec      度（只作 1° 内的位置核对）
+     detector     测到它的探测器：WCDA（约 1—25 TeV）或 KM2A（25 TeV 以上）
+     band         文中拟合能段 [TeV, TeV]
+     index        光子指数（正数，dN/dE ∝ E^-index）
+     flux         {e2dnde_erg, energyTeV, text}：参考能量处的 E²dN/dE（erg cm⁻² s⁻¹），text 照抄文中写法
+     r39          39% 包含半径（度）；r39Upper 为真时是上限
+     wcda         {detected, ul, ulEnergyTeV}：WCDA 测没测到；ul 为参考能量处 dN/dE 上限（cm⁻² s⁻¹ TeV⁻¹），没给写 null
+     ref          {text, url}
+     low          LHAASO 没测到低能段时，用别的仪器（H.E.S.S. 等）的测量补：[{instrument, band, n0（cm⁻² s⁻¹ TeV⁻¹）, e0, index, sigma（度）, ref}]
+   估计时拼成完整谱：各段在自己的测量能段里用自己的幂律，两段之间按两端连线（对数），最高一段往上外推。
+   低能没有任何测量（只有上限也不算）时不往下外推，只算测到的能段，时间写成上限“≤”。 */
+const LHAASO_LIT = (() => {
+  const microquasars = {text: "LHAASO 合作组，Ultrahigh-energy gamma-ray emission associated with black hole–jet systems，表 1（arXiv:2410.08988）",
+    url: "https://arxiv.org/abs/2410.08988"};
+  const cu100 = x => ({e2dnde_erg: x * 1e-12, energyTeV: 100, text: `100 TeV 处 ${x} Crab Unit（文中 1 CU ≈ 10⁻¹² erg cm⁻² s⁻¹）`});
+  return [
+    // 低能用 H.E.S.S. 2022—2024 约 100 h 的测量：椭圆高斯 σ 0.34° × 0.06°，ON 区面积按两轴几何平均 0.14° 算
+    {name: "LHAASO J1819-2541", counterparts: ["V4641 Sgr"], ra: 274.82, dec: -25.68, detector: "KM2A", band: [40, 1000], index: 2.67,
+      flux: cu100(3.9), r39: 0.36, wcda: {detected: false, ul: null}, ref: microquasars,
+      low: [{instrument: "H.E.S.S.", band: [0.8, 22], n0: 1.71e-13, e0: 2, index: 1.82, sigma: Math.sqrt(0.34 * 0.06),
+        ref: {text: "H.E.S.S. 合作组，Constraining the nature of the most extreme Galactic particle accelerator，A&A 2026（arXiv:2511.10537）",
+          url: "https://arxiv.org/abs/2511.10537"}}]},
+    // GRS 1915+105、MAXI J1820+070：H.E.S.S. / MAGIC / VERITAS 只给过上限（H.E.S.S. 2009；MAXI J1820+070 2018 爆发期），没有低能测量
+    {name: "LHAASO J1914+1049", counterparts: ["GRS 1915+105"], ra: 288.50, dec: 10.82, detector: "KM2A", band: [25, 400], index: 3.07,
+      flux: cu100(0.17), r39: 0.33, wcda: {detected: false, ul: null}, ref: microquasars},
+    {name: "LHAASO J1821+0726", counterparts: ["MAXI J1820+070"], ra: 275.25, dec: 7.43, detector: "KM2A", band: [25, 400], index: 3.19,
+      flux: cu100(0.13), r39: 0.28, r39Upper: true, wcda: {detected: false, ul: null}, ref: microquasars},
+  ];
+})();
+
+/* ==== 51-detect.js ==== */
+"use strict";
+/* 打到 5σ 要多少小时：页面里的简单估计（2026-11-26 起；同日下午改为按完整谱分能段算）。
+   LACT 还没有绝对灵敏度（IRF 待提供），只用一个占位锚点：整阵在各天顶角“1% Crab（HEGRA 谱）观测 50 h 到 5σ”。
+   做法：0.1—1000 TeV 每十倍能量分 6 档。每档的信号 = 有效面积 × 效率 × 源在这一档的流强；
+   每档的背景 = 一个常数 ×有效面积 × E^-3（残余宇宙线）× (PSF/PSF₁TeV)²，常数按锚点在每个天顶角反解。
+   每档用 Li & Ma 第 17 式（α = 1/OFF 区个数）按期望计数算显著性，各档显著性平方相加，所以 σ 随 √t 增长；
+   另要求总超出事例 ≥ 10。展宽源每档背景乘 1 + (σ_src / PSF(E))²。一个 8 台组的显著性平方率按折算比 w。
+   源的谱拼成完整谱（各段在自己的测量能段用自己的幂律，段间按对数连线，最高一段往上外推）：
+     · 1LHAASO：WCDA 1—25 TeV、KM2A 25 TeV 以上；只有 KM2A 时低能用文献或 TeVCat（IACT）补，没有就不往下外推；
+     · 文献 LHAASO 对应体（50-lhaaso-lit.js）：高能用 LHAASO，低能用文中别的仪器（H.E.S.S. 等）补；
+     · 只有 TeVCat：Crab 单位流强（阈能 ≤ 10 TeV 按 HEGRA Crab，往下外推；阈能 > 10 TeV 按 1LHAASO 的 Crab，只算阈能以上）。
+   低能没有测量、只算了测到的高能段的，时间是上限，写“≤”。Fermi 不估。这些常数都是占位，LACT 性能版本给出后替换。 */
+const WBDetect = (() => {
+  const P = {
+    crab: {n0: 2.83e-11, e0: 1, g: 2.62},          // HEGRA Crab（cm⁻² s⁻¹ TeV⁻¹）：锚点；TeVCat 阈能 ≤ 10 TeV 的 Crab 单位
+    crabUHE: {n0: 6.23e-16, e0: 50, g: 3.19},      // 1LHAASO 的 Crab（KM2A）：TeVCat 阈能 > 10 TeV 的 Crab 单位（100 TeV 处约 1e-12 erg cm⁻² s⁻¹）
+    anchorCrab: 0.01, anchorHours: 50, anchorSigma: 5,
+    // 整阵有效面积（km²）：各天顶角几个能量点（TeV），对数能量插值；能阈处 0.3 km²，能阈以下为 0，最高点以上取平。按登记表 aeff 的文字给
+    aeff: {20: [[1, 1], [5, 2], [30, 2.5]], 40: [[1, 1], [5, 2], [30, 3]], 60: [[3, 1.5], [10, 3], [30, 5]]},
+    aeffAtEth: 0.3,
+    efficiency: 0.5,                                 // 选择与 ON 区包含
+    psf: {at1TeV: 0.1, slope: 0.35, floor: 0.045},   // PSF(E) = max(0.045°, 0.1° × E^-0.35)，10 TeV 以上约 0.045°（登记表 psf）
+    bgIndex: 3.0,                                    // 残余背景谱指数（宇宙线 2.7，加上鉴别随能量变好）
+    bins: {lo: 0.1, perDecade: 6, decades: 4},       // 0.1—1000 TeV
+    minExcess: 10, sigma: 5, defaultIndex: 2.5,
+    tevcatMaxTeV: 10,                                // TeVCat 阈能高于这个按超高能处理
+    tevcatLowHiTeV: 20,                              // TeVCat（IACT）流强给 LHAASO 补低能段时用到的最高能量
+  };
+  const R = Math.PI / 180, cache = new Map();
+  const interp = (table, z) => {
+    if (!table?.length) return null;
+    if (table.length === 1 || z <= table[0][0]) return table[0][1];
+    let k = 1;
+    while (k < table.length - 1 && z > table[k][0]) k++;
+    const [a, x] = table[k - 1], [b, y] = table[k];
+    return x + (z - a) * (y - x) / (b - a);
+  };
+  const tableOf = id => Object.entries(WBPolicy.get(id) || {}).map(([z, v]) => [+z, +v]).filter(([z, v]) => U.fin(z) && U.fin(v)).sort((a, b) => a[0] - b[0]);
+  const eth = z => interp(tableOf("eth_f32"), z);
+  const wOf = z => { const w = interp(tableOf("w_table"), z); return U.fin(w) ? U.clamp(w, 0, 1) : null; };
+  const alpha = () => { const n = WBPolicy.get("wobble")?.min_off; return U.fin(n) && n > 0 ? 1 / n : 1 / 3; };
+  const zmax = () => (typeof WBWindows !== "undefined" && WBWindows.previewZenith?.()) || WBPolicy.get("max_zenith") || 70;
+
+  // 能量分档
+  const EDGES = Array.from({length: P.bins.perDecade * P.bins.decades + 1}, (_, j) => P.bins.lo * 10 ** (j / P.bins.perDecade));
+  const MIDS = EDGES.slice(0, -1).map((e, j) => Math.sqrt(e * EDGES[j + 1]));
+  const psf = E => Math.max(P.psf.floor, P.psf.at1TeV * E ** -P.psf.slope);
+  const pl = (c, E) => c.n0 * (E / c.e0) ** -c.g;
+  const plAbove = (c, E) => c.g > 1 ? c.n0 * c.e0 / (c.g - 1) * (E / c.e0) ** (1 - c.g) : Infinity;
+  // 一档里的积分：对数能量上 Simpson（5 点）
+  function integrate(f, a, b) {
+    const la = Math.log(a), lb = Math.log(b), h = (lb - la) / 4;
+    let s = 0;
+    for (let i = 0; i <= 4; i++) { const E = Math.exp(la + i * h); s += (i === 0 || i === 4 ? 1 : i % 2 ? 4 : 2) * E * f(E); }
+    return s * h / 3;
+  }
+  const crabBins = EDGES.slice(0, -1).map((a, j) => integrate(E => pl(P.crab, E), a, EDGES[j + 1]));
+  const bgShape = EDGES.slice(0, -1).map((a, j) => integrate(E => E ** -P.bgIndex, a, EDGES[j + 1]) * (psf(MIDS[j]) / psf(1)) ** 2);
+
+  // 有效面积（km²）：天顶角表之间线性插值，能阈以下为 0
+  function aeffTable(zt, E) {
+    const pts = [[eth(zt), P.aeffAtEth], ...P.aeff[zt].filter(([e]) => e > eth(zt))];
+    if (E < pts[0][0]) return 0;
+    if (E >= pts.at(-1)[0]) return pts.at(-1)[1];
+    let k = 1; while (E > pts[k][0]) k++;
+    const [e1, a1] = pts[k - 1], [e2, a2] = pts[k];
+    return a1 + (a2 - a1) * Math.log(E / e1) / Math.log(e2 / e1);
+  }
+  function aeff(z, E) {
+    if (E < eth(z)) return 0;
+    if (z <= 20) return aeffTable(20, E);
+    if (z >= 60) return aeffTable(60, E);
+    const lo = z < 40 ? 20 : 40, hi = lo + 20, f = (z - lo) / 20;
+    return (1 - f) * aeffTable(lo, E) + f * aeffTable(hi, E);
+  }
+
+  function liMa(non, noff, a) {
+    if (!(non > 0) || !(noff > 0) || non <= a * noff) return 0;
+    const s = non + noff, v = 2 * (non * Math.log((1 + a) / a * non / s) + noff * Math.log((1 + a) * noff / s));
+    return v > 0 ? Math.sqrt(v) : 0;
+  }
+  /* 某天顶角的探测器：每档的有效面积 × 效率（cm² × 小时）和背景率（每小时，点源 ON 区）。
+     背景常数 B 按锚点反解：1% Crab 观测 50 h，各档显著性平方之和 = 25。按 0.25° 记住结果。 */
+  const zMemo = new Map();
+  function at(z) {
+    const key = Math.round(z * 4) / 4;
+    if (zMemo.has(key)) return zMemo.get(key);
+    const a = alpha(), T = P.anchorHours;
+    const exposure = MIDS.map(E => aeff(key, E) * 1e10 * P.efficiency * 3600);
+    const shape = bgShape.map((g, j) => g * aeff(key, MIDS[j]));
+    const ts = B => exposure.reduce((sum, x, j) => {
+      if (!(x > 0)) return sum;
+      const s = P.anchorCrab * crabBins[j] * x * T, b = B * shape[j] * T, S = liMa(s + b, b / a, a);
+      return sum + S * S;
+    }, 0);
+    let lo = 1e-30, hi = 1e30;                       // 背景越大显著性越低：对数二分
+    for (let i = 0; i < 120; i++) { const mid = Math.sqrt(lo * hi); if (ts(mid) > P.anchorSigma ** 2) lo = mid; else hi = mid; }
+    const B = Math.sqrt(lo * hi), out = {exposure, bg: shape.map(g => B * g)};
+    if (zMemo.size > 2000) zMemo.clear();
+    zMemo.set(key, out);
+    return out;
+  }
+  // 整阵在天顶角 z 每小时的显著性平方 r 和信号事例率 Rs；不合格（能阈高于能段上限或超过天顶角上限）为 0
+  function rate(est, z) {
+    const E = eth(z);
+    if (!U.fin(E) || z > est.zmax + 1e-9 || (U.fin(est.edge) && E > est.edge)) return {r: 0, Rs: 0};
+    const d = at(z), a = alpha();
+    let r = 0, Rs = 0;
+    for (let j = 0; j < MIDS.length; j++) {
+      const x = d.exposure[j]; if (!(x > 0)) continue;
+      const s = est.flux[j] * x; if (!(s > 0)) continue;
+      const b = d.bg[j] * est.k[j], S = liMa(s + b, b / a, a);
+      r += S * S; Rs += s;
+    }
+    return {r, Rs};
+  }
+  const hoursFor = (r, Rs) => r > 0 && Rs > 0 ? Math.max(P.sigma ** 2 / r, P.minExcess / Rs) : null;
+
+  /* 完整谱：comps 是按能量排好的几段 {lo, hi, n0, e0, g, sigma, label}；
+     lowCut：最低一段以下没有测量，不往下外推；hiCut：最高一段以上不外推 */
+  function dnde(spec, E) {
+    const cs = spec.comps;
+    const inside = cs.find(c => E >= c.lo && E <= c.hi);
+    if (inside) return pl(inside, E);
+    if (E < cs[0].lo) return spec.lowCut ? 0 : pl(cs[0], E);
+    if (E > cs.at(-1).hi) return spec.hiCut ? 0 : pl(cs.at(-1), E);
+    for (let i = 0; i + 1 < cs.length; i++) {
+      const a = cs[i], b = cs[i + 1];
+      if (E > a.hi && E < b.lo) {
+        const fa = pl(a, a.hi), fb = pl(b, b.lo), x = Math.log(E / a.hi) / Math.log(b.lo / a.hi);
+        return Math.exp(Math.log(fa) + x * (Math.log(fb) - Math.log(fa)));
+      }
+    }
+    return 0;
+  }
+  function sigmaAt(spec, E) {
+    const cs = spec.comps;
+    const c = cs.find(c => E >= c.lo && E <= c.hi) || (E < cs[0].lo ? cs[0] : E > cs.at(-1).hi ? cs.at(-1) : null);
+    if (c) return c.sigma || 0;
+    return Math.max(...cs.map(c => c.sigma || 0));
+  }
+
+  const sigmaOf = ext => ext && !ext.upperLimit && U.fin(ext.radiusDeg) ? ext.radiusDeg : 0;
+  const tevSigma = m => { const e = m.extension, dims = e?.kind === "catalog-angular-size" ? [e.xDeg, e.yDeg].filter(v => U.fin(v) && v > 0) : [];
+    return dims.length === 2 ? Math.sqrt(dims[0] * dims[1]) : dims[0] || 0; };
+  const lhOk = c => c?.detected && c.flux && !c.flux.upperLimit && U.fin(c.flux.value) && c.flux.value > 0 && U.fin(c.spectralIndex);
+  // TeVCat 的 Crab 单位流强换成一段幂律；阈能 > 10 TeV 的按 1LHAASO 的 Crab、只算阈能以上
+  function tevcatComp(m, {hi = Infinity} = {}) {
+    const f = m.flux;
+    if (!f || f.unit !== "Crab" || f.upperLimit || !U.fin(f.value) || f.value <= 0) return null;
+    const Et = U.fin(f.energyThresholdGeV) ? f.energyThresholdGeV / 1000 : 1, uhe = Et > P.tevcatMaxTeV;
+    const ref = uhe ? P.crabUHE : P.crab, g = U.fin(m.spectralIndex) ? m.spectralIndex : uhe ? P.crabUHE.g : P.defaultIndex;
+    const n0 = f.value * plAbove(ref, Et) * (g - 1) / Et;
+    return {lo: Et, hi: Math.max(Et, hi), n0, e0: Et, g, sigma: tevSigma(m), uhe, member: m,
+      label: `TeVCat：${U.n(Et >= 1 ? Et : Et * 1000, 0)} ${Et >= 1 ? "TeV" : "GeV"} 以上 ${U.n(f.value, f.value < 0.1 ? 3 : 2)} Crab（${uhe ? "1LHAASO 的 Crab" : "HEGRA Crab"}），Γ = ${U.n(g, 2)}${U.fin(m.spectralIndex) ? "" : "（目录缺，取" + (uhe ? " Crab 的" : "") + " " + U.n(g, 2) + "）"}`};
+  }
+  const lowFill = members => {
+    for (const m of members.filter(x => x.catalog === "TeVCat")) {
+      const c = tevcatComp(m, {hi: P.tevcatLowHiTeV});
+      if (c && !c.uhe) return {...c, hi: Math.max(c.lo, P.tevcatLowHiTeV)};
+    }
+    return null;
+  };
+
+  // 同一处的目录行里拼谱：1LHAASO → 文献 LHAASO 对应体 → TeVCat
+  function spectrum(members) {
+    for (const m of members.filter(x => x.catalog === "1LHAASO")) {
+      const comps = m.components || [], wc = comps.find(c => c.detector === "WCDA"), km = comps.find(c => c.detector === "KM2A");
+      if (!lhOk(wc) && !lhOk(km)) continue;
+      const parts = [];
+      if (lhOk(wc)) parts.push({lo: 1, hi: 25, n0: wc.flux.value, e0: wc.flux.referenceEnergyTeV || 3, g: wc.spectralIndex, sigma: sigmaOf(wc.extension),
+        label: `1LHAASO WCDA：${U.n(wc.flux.referenceEnergyTeV || 3, 0)} TeV 处 ${sci(wc.flux.value)} cm⁻² s⁻¹ TeV⁻¹，Γ = ${U.n(wc.spectralIndex, 2)}`});
+      if (lhOk(km)) parts.push({lo: 25, hi: 1000, n0: km.flux.value, e0: km.flux.referenceEnergyTeV || 50, g: km.spectralIndex, sigma: sigmaOf(km.extension),
+        label: `1LHAASO KM2A：${U.n(km.flux.referenceEnergyTeV || 50, 0)} TeV 处 ${sci(km.flux.value)} cm⁻² s⁻¹ TeV⁻¹，Γ = ${U.n(km.spectralIndex, 2)}`});
+      let lowCut = false, fill = null;
+      if (!lhOk(wc)) { fill = lowFill(members); if (fill) parts.unshift(fill); else lowCut = true; }
+      // KM2A 没测到（只有上限）：WCDA 的谱不往 25 TeV 以上外推
+      return {member: m, comps: parts, lowCut, hiCut: !lhOk(km),
+        note: !lhOk(wc) && !fill ? `WCDA 没测到${U.fin(wc?.flux?.value) ? `（3 TeV 上限 ${sci(wc.flux.value)}）` : ""}，25 TeV 以下没有测量，只算 KM2A 测到的部分` : ""};
+    }
+    const hit = literature(members);
+    if (hit) {
+      const L = hit.entry, e0 = L.flux.energyTeV, n0 = L.flux.e2dnde_erg * 0.6241509 / e0 ** 2;   // 1 erg = 0.624 TeV
+      const main = {lo: L.band[0], hi: L.band[1], n0, e0, g: L.index, sigma: L.r39Upper ? 0 : L.r39 || 0,
+        label: `${L.name}（文献）：${L.band[0]}—${L.band[1]} TeV，Γ = ${U.n(L.index, 2)}，${L.flux.text}，r39 ${L.r39Upper ? "< " : ""}${U.n(L.r39, 2)}°`, ref: L.ref};
+      const parts = [main];
+      let fill = null;
+      if (L.detector !== "WCDA" && L.band[0] > 3) {
+        for (const x of L.low || []) parts.unshift({lo: x.band[0], hi: x.band[1], n0: x.n0, e0: x.e0, g: x.index, sigma: x.sigma || 0, ref: x.ref,
+          label: `${x.instrument}（文献）：${x.band[0]}—${x.band[1]} TeV，${U.n(x.e0, 0)} TeV 处 ${sci(x.n0)} cm⁻² s⁻¹ TeV⁻¹，Γ = ${U.n(x.index, 2)}`});
+        if (!(L.low || []).length && (fill = lowFill(members))) parts.unshift(fill);
+      }
+      const lowCut = L.detector !== "WCDA" && L.band[0] > 3 && parts.length === 1;
+      return {member: hit.member, lit: L, comps: parts.sort((a, b) => a.lo - b.lo), lowCut,
+        note: lowCut ? `${L.band[0]} TeV 以下没有测量（WCDA 和 IACT 都没测到），只算 LHAASO 测到的部分` : ""};
+    }
+    let uhe = null;
+    for (const m of members.filter(x => x.catalog === "TeVCat")) {
+      const c = tevcatComp(m);
+      if (!c) continue;
+      if (c.uhe) { uhe ??= c; continue; }
+      return {member: m, comps: [c], extrap: c.lo > 2};
+    }
+    if (uhe) return {member: uhe.member, comps: [uhe], lowCut: true, note: `TeVCat 的流强是 ${U.n(uhe.lo, 0)} TeV 以上量的，以下没有测量，只算这一段`};
+    const cats = new Set(members.map(m => m.catalog));
+    const reason = cats.has("TeVCat") ? "TeVCat 没给流强" : cats.has("1LHAASO") ? "1LHAASO 流强不可用" :
+      [...cats].some(c => /4FGL|Fermi/i.test(c)) ? "Fermi 源不估" : "没有目录流强";
+    return {reason};
+  }
+  function literature(members) {
+    const list = typeof LHAASO_LIT !== "undefined" ? LHAASO_LIT : [];
+    for (const m of members) {
+      const names = new Set([m.name, ...(m.aliases || [])].filter(k => typeof k === "string").map(norm));
+      for (const entry of list)
+        if ([entry.name, ...(entry.counterparts || [])].some(k => names.has(norm(k))) && sep(m, {ra: entry.ra, dec: entry.dec}) <= 1) return {entry, member: m};
+    }
+    return null;
+  }
+  function sci(v) {
+    if (!U.fin(v) || v <= 0) return "—";
+    const e = Math.floor(Math.log10(v)), m = v / 10 ** e;
+    return `${m.toFixed(2)}×10${String(e).replace("-", "⁻").replace(/\d/g, d => "⁰¹²³⁴⁵⁶⁷⁸⁹"[d])}`;
+  }
+  const crab = f => f >= 0.1 ? U.n(f, 2) + " Crab" : U.n(f * 100, f < 0.01 ? 2 : 1) + "% Crab";
+
+  /* 表里同一处的合并规则要求两两能对上，示例任务（如 task:Crab）会把 1LHAASO 那一行挤出去。
+     选谱时再按名称和别名把 1 度内的 1LHAASO / TeVCat 行找回来（近的在前）。 */
+  let index = null, indexN = -1;
+  const norm = n => String(n).normalize("NFKC").toLowerCase().replace(/\s+/g, "").replace(/\*+$/, "");
+  const pos = r => [r.ra_deg ?? r.ra, r.dec_deg ?? r.dec];
+  const sep = (a, b) => {
+    const [r1, d1] = pos(a), [r2, d2] = pos(b);
+    if (![r1, d1, r2, d2].every(U.fin)) return Infinity;
+    const c = Math.sin(d1 * R) * Math.sin(d2 * R) + Math.cos(d1 * R) * Math.cos(d2 * R) * Math.cos((r1 - r2) * R);
+    return Math.acos(U.clamp(c, -1, 1)) / R;
+  };
+  function linked(members) {
+    if (typeof WBCatalog === "undefined" || !WBCatalog.active) return members;
+    // 私有版里 1LHAASO 被 2LHAASO 替换，不在 active() 里；它的谱另存在 WBCatalog.lhaaso1
+    const shown = WBCatalog.active(), ids = new Set(shown.map(r => r.id));
+    const hidden = (WBCatalog.lhaaso1 || []).filter(r => !ids.has(r.id)), all = [...shown, ...hidden];
+    if (!index || indexN !== all.length) {
+      index = new Map(); indexN = all.length;
+      // 1LHAASO 论文的对应体表（associations，不含“不确定”的）也算：TeVCat 名字能对上就把那一行 1LHAASO 找回来
+      for (const r of all) if (r.catalog === "1LHAASO" || r.catalog === "TeVCat")
+        for (const k of [r.name, ...(r.aliases || []), ...(r.catalog === "1LHAASO" ? (r.associations || []).filter(a => !a.uncertain).map(a => a.name) : [])])
+          if (typeof k === "string" && k.trim()) {
+            const key = norm(k); if (!index.has(key)) index.set(key, []); if (!index.get(key).includes(r)) index.get(key).push(r);
+          }
+    }
+    const out = new Map(members.map(m => [m.id, m])), extra = [];
+    // 2LHAASO 行没有别名，按位置（0.2° 内，同表里的合并规则）找 1LHAASO
+    for (const m of members.filter(x => x.catalog === "2LHAASO")) for (const r of WBCatalog.lhaaso1 || []) {
+      const d = sep(m, r);
+      if (!out.has(r.id) && d <= 0.2) { out.set(r.id, r); extra.push([d, r]); }
+    }
+    for (const m of members) for (const k of [m.name, ...(m.aliases || [])]) {
+      if (typeof k !== "string") continue;
+      for (const r of index.get(norm(k)) || []) {
+        const d = sep(m, r);
+        if (!out.has(r.id) && d <= 1) { out.set(r.id, r); extra.push([d, r]); }
+      }
+    }
+    return [...members, ...extra.sort((a, b) => a[0] - b[0]).map(x => x[1])];
+  }
+
+  function estimate(members) {
+    members = linked((members || []).filter(Boolean));
+    if (!members.length) return null;
+    const site = WBPolicy.get("site"), zm = zmax();
+    const key = members.map(m => m.id).sort().join("|") + "|" + zm;
+    if (cache.has(key)) return cache.get(key);
+    const pick = spectrum(members), out = {key, ok: false, reason: pick.reason || null, lit: pick.lit || null};
+    if (pick.comps?.length && site) {
+      const m = pick.member, dec = m.dec_deg ?? m.dec, spec = {comps: pick.comps, lowCut: !!pick.lowCut, hiCut: !!pick.hiCut};
+      let edge = null;
+      try {
+        const band = WBCatalog.draft(m).energy_band_tev, rule = WBPolicy.get("qual_rule")?.edge;
+        if (Array.isArray(band) && band.every(U.fin)) edge = band[rule === "lower" ? 0 : 1];
+      } catch (e) { edge = null; }
+      const flux = EDGES.slice(0, -1).map((a, j) => integrate(E => dnde(spec, E), a, EDGES[j + 1]));
+      const sig = MIDS.map(E => sigmaAt(spec, E));
+      Object.assign(out, {member: m, spec, flux, sig, k: sig.map((s, j) => 1 + (s / psf(MIDS[j])) ** 2),
+        upper: spec.lowCut, extrap: !!pick.extrap, note: pick.note || "", edge, zmax: zm, dec,
+        refs: pick.comps.filter(c => c.ref).map(c => ({...c.ref, short: c.label.split("（")[0]})), sigmaLow: sigmaAt(spec, 2), sigmaHigh: sigmaAt(spec, 50)});
+      // 20° 整阵能阈以上的流强折合几成 Crab（HEGRA）
+      const E20 = eth(20);
+      if (U.fin(E20)) {
+        const src = MIDS.reduce((s, E, j) => s + (E >= E20 ? flux[j] : 0), 0), ref = MIDS.reduce((s, E, j) => s + (E >= E20 ? crabBins[j] : 0), 0);
+        out.crabFrac = ref > 0 ? src / ref : null;
+      }
+      // 中天：一直停在中天天顶角时要多久（几何上最好的情形）
+      const zc = Math.abs(site.lat_deg - dec);
+      if (U.fin(dec) && zc <= zm) {
+        const x = rate(out, zc), t = hoursFor(x.r, x.Rs);
+        if (t != null) out.best = {z: zc, t};
+        // 天顶角自然分布：时角在可见范围里均匀取样（全年暗夜对时角大致均匀）
+        const phi = site.lat_deg * R, d = dec * R, cz = Math.cos(zm * R);
+        const c = (cz - Math.sin(phi) * Math.sin(d)) / (Math.cos(phi) * Math.cos(d));
+        const H = c <= -1 ? Math.PI : c >= 1 ? 0 : Math.acos(c), n = 48;
+        let rs = 0, ss = 0;
+        for (let i = 0; i < n; i++) {
+          const h = (i + .5) / n * H, z = Math.acos(U.clamp(Math.sin(phi) * Math.sin(d) + Math.cos(phi) * Math.cos(d) * Math.cos(h), -1, 1)) / R;
+          const x = rate(out, z); rs += x.r; ss += x.Rs;
+        }
+        const tm = hoursFor(rs / n, ss / n);
+        if (tm != null) out.mix = {t: tm};
+      }
+      out.ok = !!(out.best || out.mix);
+      if (!out.ok) out.reason = "天顶角上限内看不到";
+    }
+    if (cache.size > 4000) cache.clear();
+    cache.set(key, out);
+    return out;
+  }
+  const basisText = e => e?.spec ? e.spec.comps.map(c => c.label).join("；") +
+    (e.spec.comps.length > 1 && e.spec.comps.some((c, i) => i && c.lo > e.spec.comps[i - 1].hi) ? "；段间按两端对数连线" : "") : "";
+
+  function fmt(t) {
+    if (!U.fin(t)) return "—";
+    if (t < 0.1) return "<0.1";
+    if (t >= 1e4) return "> 1 万";
+    return U.n(t, t < 10 ? 1 : 0);
+  }
+  const mark = e => e.upper ? "≤" : e.extrap ? "≈" : "";
+  const note = () => `灵敏度为占位：整阵在各天顶角 1% Crab（HEGRA 谱）50 h 到 5σ；按完整谱分能段，Li & Ma，α = 1/${Math.round(1 / alpha())}，超出事例 ≥ ${P.minExcess}`;
+  // 全年窗口表的一格（整阵口径，天顶角自然分布）
+  function cell(members) {
+    const e = estimate(members);
+    if (!e?.ok) return `<td class="num win-t5 is-none" title="${U.esc(e?.reason || "无法估计")}">—</td>`;
+    const t = e.mix?.t ?? e.best?.t;
+    const tip = [`打到 5σ 约需 ${mark(e)}${fmt(e.mix?.t)} h（天顶角自然分布，整阵）`, e.best ? `中天（天顶角 ${U.n(e.best.z, 0)}°）约 ${mark(e)}${fmt(e.best.t)} h` : "",
+      basisText(e), e.note, Math.max(...e.sig) > P.psf.at1TeV / 2 ? `展宽 σ ≈ ${U.n(e.sigmaLow, 2)}°（低能）/ ${U.n(e.sigmaHigh, 2)}°（高能）` : "", note()].filter(Boolean).join("\n");
+    return `<td class="num win-t5${t > 1000 ? " is-long" : ""}" title="${U.esc(tip)}">${mark(e)}${fmt(t)}</td>`;
+  }
+  const hours = members => { const e = estimate(members); return e?.ok ? (e.mix?.t ?? e.best?.t) : null; };
+
+  /* 源卡里的一节。Z = WBGeo.zenithMonths 的结果（可能还没算完）；frac(m) = 每月期望比例（天气，雨季 0） */
+  function card(members, {Z = null, year = null, frac = () => 1} = {}) {
+    const e = estimate(members);
+    const head = `<div class="card-h"><h3>打到 5σ</h3><span class="note">简单估计 · 灵敏度占位</span></div>`;
+    const refs = (e?.refs || []).map(r => ` <a href="${U.esc(r.url)}" target="_blank" rel="noopener noreferrer" title="${U.esc(r.text)}">${U.esc(r.short)} 文献 ↗</a>`).join("");
+    if (!e?.ok) return head + `<p class="note">${U.esc(e?.reason || "无法估计")}。</p>`;
+    const pre = mark(e) ? mark(e) + " " : "";
+    let year5 = "…", when = "";
+    if (Z?.months && Array.from({length: 12}, (_, i) => Z.months[i + 1]).every(Boolean)) {
+      let s2 = 0, ns = 0, reached = null;
+      for (let m = 1; m <= 12; m++) {
+        const f = frac(m) ?? 0;
+        Z.months[m].forEach((h, b) => {
+          if (!(h > 0) || !(f > 0)) return;
+          const z = Math.min(Z.zenith_max_deg, (b + .5) * Z.bin_deg), x = rate(e, z);
+          s2 += h * f * x.r; ns += h * f * x.Rs;
+        });
+        if (reached == null && s2 >= P.sigma ** 2 && ns >= P.minExcess) reached = m;
+      }
+      year5 = s2 > 0 ? (e.upper ? "≥ " : "") + U.n(Math.sqrt(s2), Math.sqrt(s2) < 10 ? 1 : 0) : "0";
+      when = reached ? `从 1 月起按月累计，${reached} 月底前到 5σ。` : s2 > 0 ? "全年累计到不了 5σ。" : "";
+    }
+    const w = e.best ? wOf(e.best.z) : null;
+    const spec = basisText(e) + (U.fin(e.crabFrac) ? `；20° 整阵能阈（${U.n(eth(20), 2)} TeV）以上约 ${crab(e.crabFrac)}` : "") + "。" + (e.note ? e.note + "，时间是上限。" : "");
+    const big = Math.max(...e.sig);
+    const more = [
+      big > 0 ? (Math.abs(e.sigmaLow - e.sigmaHigh) > 0.01 ? `展宽 σ ≈ ${U.n(e.sigmaLow, 2)}°（低能）/ ${U.n(e.sigmaHigh, 2)}°（高能），` : `展宽 σ ≈ ${U.n(big, 2)}°，`) + "ON 区随之放大、背景变多。" : "按点源算。",
+      U.fin(w) && w > 0 && e.best ? `四组模式下单用一个 8 台组：中天约 ${pre}${fmt(e.best.t / w)} h（w = ${U.n(w, 2)}）。` : "",
+      when,
+    ].filter(Boolean).join("");
+    return head + `<dl class="win-kv3">
+        <div><dt>中天${e.best ? " " + U.n(e.best.z, 0) + "°" : ""}</dt><dd>${pre}${fmt(e.best?.t)}<small> h</small></dd></div>
+        <div><dt>天顶角自然分布</dt><dd>${pre}${fmt(e.mix?.t)}<small> h</small></dd></div>
+        <div title="把 ${year ?? ""} 年各月能看的时间（乘每月可观测比例，雨季为 0）都给这个源，累计能到几 σ"><dt>${year ?? ""} 年都给它</dt><dd>${year5}<small> σ</small></dd></div></dl>
+      <p class="note">${U.esc(spec)}${refs}</p><p class="note">${U.esc(more)}</p>
+      <details class="dt-how"><summary>怎么估的</summary><p class="note">整阵口径。${U.esc(note())}。0.1—1000 TeV 每十倍能量分 6 档：每档信号 = 有效面积 × 效率 ${P.efficiency} × 源在这一档的流强，背景 ∝ 有效面积 × E^-${P.bgIndex} × PSF²，背景的总量按锚点在每个天顶角反解；各档显著性平方相加，随 √t 增长。有效面积按登记表 aeff 的文字给（能阈处 0.3 km²，20°：1 TeV 1 km²、5 TeV 2 km²、30 TeV 2.5 km²；60°：3 TeV 1.5 km²、10 TeV 3 km²、30 TeV 5 km²），PSF 1 TeV 0.1°、10 TeV 以上 0.045°；展宽源每档背景乘 1 + (σ_src/PSF)²，所以大展宽源在高能吃亏更多。“天顶角自然分布”假设全年暗夜对时角大致均匀；大天顶角能阈高、高能有效面积大，硬谱源在大天顶角反而快，所以它可能比“中天”还短。“都给它”用下面天顶角分布的逐月小时乘每月可观测比例（雨季为 0）。谱拼法：1LHAASO（WCDA 1—25 TeV，KM2A 25 TeV 以上）或文献 LHAASO 对应体为主；LHAASO 没测到低能段时用 H.E.S.S. 等 IACT 的测量（文献或 TeVCat）补；段间按对数连线；低能没有任何测量的不往下外推，只算测到的部分，时间写“≤”。各仪器的源区大小、系统误差不同，拼接处可能不连续，只作量级参考。以上常数都是占位，LACT 性能版本给出后替换。</p></details>`;
+  }
+
+  /* 一段观测（手排）的显著性平方和事例数：samples = [{z, hours}] */
+  function accumulate(members, samples) {
+    const e = estimate(members);
+    if (!e?.ok) return null;
+    let s2 = 0, ns = 0;
+    for (const {z, hours: h} of samples) { const x = rate(e, z); s2 += x.r * h; ns += x.Rs * h; }
+    return {s2, ns, upper: e.upper, extrap: e.extrap};
+  }
+  // σ：低能没算进去的是下限（≥）
+  const sigmaText = acc => !acc ? "—" : (acc.upper ? "≥" : acc.extrap ? "≈" : "") + U.n(Math.sqrt(acc.s2), Math.sqrt(acc.s2) < 10 ? 1 : 0) + "σ" + (acc.ns < P.minExcess ? "*" : "");
+
+  return {P, estimate, cell, hours, card, accumulate, sigmaText, fmt, note, eth, rate, dnde, aeff};
+})();
 
 /* ==== 52-windows.js ==== */
 "use strict";
@@ -6654,6 +7105,9 @@ const WBWindows = (() => {
   function table(){
     if (!state.ready) return `<p class="note" role="status">${U.esc(state.error || "读取公开目录…")}</p>`;
     const visible = merge(sortRows(rows().filter(r=>filter(r)))), pages = Math.max(1,Math.ceil(visible.length/size));
+    // 5σ 约需：按同一处各目录合起来的估计排，短的在前，估不了的放最后
+    const t5=state.mode==="LACT"&&typeof WBDetect!=="undefined";
+    if (t5&&state.sort==="t5"){ const h=new Map(visible.map(g=>[g,WBDetect.hours(g.members)])); visible.sort((a,b)=>{const x=h.get(a),y=h.get(b);return x===y?0:x==null?1:y==null?-1:x-y;}); }
     state.page=U.clamp(state.page,0,pages-1);
     if (!visible.length) return `<p class="note">没有匹配的源。</p>`;
     const scale=heatScale(), flux=state.sort==="flux", basis=new Map();
@@ -6668,13 +7122,13 @@ const WBWindows = (() => {
         <div class="win-meta" title="${U.esc(metaLine(item))}">${U.esc(metaLine(item))}</div></th>
         <td class="win-starcell"><button class="win-focus" type="button" data-act="wiFocus" data-arg="${U.esc(r.id)}" aria-pressed="${Boolean(pref.focus)}" aria-label="标记重点 ${U.esc(r.name)}" title="标记重点">${pref.focus ? "★" : "☆"}</button>${U.fin(pref.priority)?`<span class="win-prio" title="我的优先级">${pref.priority}</span>`:""}</td>
         ${Array.from({length:12},(_,i)=>heat(vid,i+1,scale)).join("")}
-        <td class="num win-total">${U.fin(annualValue(vid))?U.n(annualValue(vid),0):"—"}</td>${flux?`<td class="num">${U.fin(tevFlux(r))?U.n(tevFlux(r),2):"—"}</td>`:""}</tr>`;
+        <td class="num win-total">${U.fin(annualValue(vid))?U.n(annualValue(vid),0):"—"}</td>${t5?WBDetect.cell(item.members):""}${flux?`<td class="num">${U.fin(tevFlux(r))?U.n(tevFlux(r),2):"—"}</td>`:""}</tr>`;
     }).join("");
     return `<div class="scroll-x win-table-wrap"><table class="win-table win-year">
       <thead><tr><th scope="col"><button type="button" class="win-mh" data-act="wiSort" data-arg="name" aria-pressed="${state.sort==="name"}" title="按名称排">源${arrow("name")}</button></th>
       <th scope="col"><button type="button" class="win-mh" data-act="wiSort" data-arg="priority" aria-pressed="${state.sort==="priority"}" title="按我的优先级排（大的在前，其次是标了 ★ 的）；只存在这个浏览器里">★${arrow("priority")}</button></th>
       ${Array.from({length:12},(_,i)=>{const on=state.sort==="month"&&i+1===state.month;return `<th scope="col" class="num win-mcol${rainy(i+1) ? " rainy" : ""}"><button type="button" class="win-mh" data-act="wiSortMonth" data-arg="${i+1}" aria-pressed="${on}" title="${rainy(i+1)?"雨季 · ":""}按 ${i+1} 月时长排">${i+1}月${on?" ▾":""}</button></th>`;}).join("")}
-      <th scope="col" class="num"><button type="button" class="win-mh" data-act="wiSort" data-arg="annual" aria-pressed="${state.sort==="annual"}" title="按合计排">${state.includeRain?"全年":"非雨季"}${arrow("annual")}</button></th>${flux?'<th scope="col" class="num" title="TeVCat 目录给的 Crab 单位流强，各源能段与测量条件可能不同">流强 Crab ▾</th>':""}</tr></thead>
+      <th scope="col" class="num"><button type="button" class="win-mh" data-act="wiSort" data-arg="annual" aria-pressed="${state.sort==="annual"}" title="按合计排">${state.includeRain?"全年":"非雨季"}${arrow("annual")}</button></th>${t5?`<th scope="col" class="num win-t5h"><button type="button" class="win-mh" data-act="wiSort" data-arg="t5" aria-pressed="${state.sort==="t5"}" title="整阵打到 5σ 约需多少小时（天顶角自然分布；按完整谱分能段算；灵敏度为占位：各天顶角 1% Crab、50 h 到 5σ）。≤ 表示低能没有测量、只算了测到的高能段（时间是上限），≈ 表示流强从更高能量往下外推。按它排时短的在前">5σ h${state.sort==="t5"?" ▴":""}</button></th>`:""}${flux?'<th scope="col" class="num" title="TeVCat 目录给的 Crab 单位流强，各源能段与测量条件可能不同">流强 Crab ▾</th>':""}</tr></thead>
       <tbody>${body}</tbody></table></div>
       <div class="win-pagination"><span class="win-scale" title="色标"><i></i>0—${U.fin(scale)?U.n(scale,0):"—"} h</span>
       <span class="muted">${[...basis].map(([k,c])=>`${U.esc(k)} ${c}`).join(" · ")}</span><span class="win-grow"></span>
@@ -6795,6 +7249,12 @@ const WBWindows = (() => {
       </div>
       <p class="note">${state.zenBusy?"还在算其余月份… ":""}几何可见时间按源中心的天顶角分档，格子越深小时越多；点月份数字换月。页面近似（${Z.step_min} 分钟取样），和表里的数差几个小时属正常。${state.expected?"已乘每月可观测比例。":""}</p>`;
   }
+  /* 打到 5σ（WBDetect，简单估计）：同一处各目录合起来选谱；全年累计用右边算好的天顶角分布 */
+  function detectPanel(s, c = sheetCtx(s)){
+    if (typeof WBDetect==="undefined") return "";
+    const Z=state.zenFor===zenKey(s) ? state.zen : null;
+    return WBDetect.card(c.group?.members || [s], {Z, year:state.year, frac:m=>expectedFraction(m) ?? 0});
+  }
   async function loadZenith(){
     const s=selected(); if(!s||state.zenBusy&&state.zenFor===zenKey(s))return;
     state.zenAbort?.abort();
@@ -6804,10 +7264,10 @@ const WBWindows = (() => {
     const order=[state.month,...Array.from({length:12},(_,i)=>i+1).filter(m=>m!==state.month)];
     try{
       const done=await WBGeo.zenithMonths(state.year,s,state.preview,{months:order,signal:controller.signal,
-        onMonth:(_,partial)=>{ if(state.zenFor===key){ state.zen=partial; updatePart("windowZenith"); } }});
+        onMonth:(_,partial)=>{ if(state.zenFor===key){ state.zen=partial; updatePart(["windowZenith","windowDetect"]); } }});
       if(done&&state.zenFor===key) state.zen=done;
     }catch(e){ if(state.zenFor===key) state.error="天顶角分布没算出来："+e.message; }
-    finally{ if(state.zenFor===key&&!controller.signal.aborted){ state.zenBusy=false; updatePart("windowZenith"); } }
+    finally{ if(state.zenFor===key&&!controller.signal.aborted){ state.zenBusy=false; updatePart(["windowZenith","windowDetect"]); } }
   }
   /* 延展度（同一处各目录各一条）与指向策略：在当前计划里的源照计划写（实际用的 wobble 方向、背景方法、拼接布局），
      不在计划里的写加入任务后按登记表的默认怎么指。 */
@@ -6911,6 +7371,7 @@ const WBWindows = (() => {
         <div><dt>整阵合格</dt><dd>${val("f32_hours")}<small> h</small></dd></div>
         <div><dt>四组合格</dt><dd>${val("s8_hours")}<small> h</small></dd></div></dl>
       ${state.yearBasis.get(s.id)?`<p class="note">数值来源：${U.esc(state.yearBasis.get(s.id))}${state.expected?"；预计 = 乘每月可观测天数比例，雨季为 0":""}。</p>`:state.annualBusy?'<p class="note" role="status">正在读全年窗口…</p>':""}</div>
+      <div class="win-sec" data-part="windowDetect">${detectPanel(s,c)}</div>
       <div class="win-sec" data-part="windowZenith">${zenithYearPanel(s)}</div>
       ${pointingHtml(s, c.group)}
       <details class="win-sec win-fold"${state.nightsOpen?" open":""}><summary data-act="wiFoldNights"><h3>${state.month} 月逐夜窗口</h3></summary><div data-part="windowNights">${state.nightsOpen?nightStrip():""}</div></details>`;
@@ -6933,6 +7394,7 @@ const WBWindows = (() => {
   function pagePart(name, where){
     if (name==="windowDetails") { const sh=sheet(App.state.arg && where==="task" ? "task:"+App.state.arg : App.state.arg, where); return sh ? sh.body : ""; }
     if (name==="windowZenith") { const x=selected(); return x ? zenithYearPanel(x) : ""; }
+    if (name==="windowDetect") { const x=selected(); return x ? detectPanel(x) : ""; }
     if (name==="windowNights") return state.nightsOpen ? nightStrip() : "";
     return "";
   }
@@ -7004,7 +7466,7 @@ const WBWindows = (() => {
           <label>坐标<input name="q" placeholder="名字 赤经 赤纬" autocomplete="off" value="${U.esc(state.coordText || "")}"></label><button class="btn" type="submit">定位</button></form>
         <label>目录<select data-change="wiControl" data-arg="catalog">${options(byCatalog,state.catalog)}</select></label>
         <label>范围<select data-change="wiControl" data-arg="status">${options(ranges,state.status)}</select></label>
-        <label>排序<select data-change="wiControl" data-arg="sort">${options([["month",state.month+" 月时长"],["annual","全年时长"],["priority","我的优先级"],["flux","TeVCat 流强参考"],["name","名称"]],state.sort)}</select></label>
+        <label>排序<select data-change="wiControl" data-arg="sort">${options([["month",state.month+" 月时长"],["annual","全年时长"],["priority","我的优先级"],["flux","TeVCat 流强参考"],...(state.mode==="LACT"?[["t5","5σ 约需（短的在前）"]]:[]),["name","名称"]],state.sort)}</select></label>
         <div class="win-stepper" title="年份"><button type="button" class="btn" data-act="wiYearStep" data-arg="-1" aria-label="上一年">‹</button><b class="num">${state.year}</b><button type="button" class="btn" data-act="wiYearStep" data-arg="1" aria-label="下一年">›</button></div>
       </div>
       <div class="win-controls win-row2">
@@ -7029,6 +7491,7 @@ const WBWindows = (() => {
     if(state.tab==="atlas") return `<div data-part="windowAtlas" class="stack">${atlasMarkup()}</div>`;
     if(state.tab==="night") return `<section class="card" aria-label="这一晚能看哪些源" data-part="windowNight">${nightPanel()}</section>
       ${typeof WBManual !== "undefined" ? WBManual.card(state.night) : ""}
+      ${typeof WBStars !== "undefined" ? `<section class="card" aria-label="这一晚能看哪些亮星" data-part="windowStars">${WBStars.card(state.night)}</section>` : ""}
       <div data-part="windowSky" class="stack win-skywrap">${skyMarkup()}</div>`;
     return `<section class="card win-yearcard">${yearToolbar()}
       <div data-part="windowTable">${table()}</div></section>`;
@@ -7273,7 +7736,7 @@ const WBWindows = (() => {
     if(star){ const on=Boolean(preference(id).focus); star.setAttribute("aria-pressed",String(on)); star.textContent=on?"★":"☆"; }
   }
   App.screens.windows={title:"源与窗口",render,mount,
-    parts:{windowTable:table,windowDetails:details,windowAtlas:()=>atlasMarkup(),windowNight:nightPanel,windowNightList:nightList,windowZenith:()=>{const s=selected();return s?zenithYearPanel(s):"";},windowNights:()=>state.nightsOpen?nightStrip():""}};
+    parts:{windowTable:table,windowDetails:details,windowAtlas:()=>atlasMarkup(),windowNight:nightPanel,windowNightList:nightList,windowZenith:()=>{const s=selected();return s?zenithYearPanel(s):"";},windowDetect:()=>{const s=selected();return s?detectPanel(s):"";},windowNights:()=>state.nightsOpen?nightStrip():"",windowStars:()=>typeof WBStars!=="undefined"?WBStars.card(state.night):""}};
   App.acts.wiSort=value=>{ state.sort=value; state.page=0; refresh(); };
   App.acts.wiSortMonth=value=>{ state.sort="month"; changeMonth(state.year,+value); };
   App.acts.wiFoldNights=()=>{ state.nightsOpen=!state.nightsOpen; updatePart("windowDetails"); };
@@ -7297,7 +7760,7 @@ const WBWindows = (() => {
   App.acts.wiGoNight=value=>{ state.night=value; clearNight(); state.tab="night"; U.store.set("window-tab","night"); refresh(); window.scrollTo({top:0,behavior:"smooth"}); };
   App.acts.wiControl=async(value,el)=>{
     const k=el.dataset.arg;
-    if(k==="mode"){clearYear();state.measure="geometry_hours";if(value==="LHAASO")state.expected=false;}
+    if(k==="mode"){clearYear();state.measure="geometry_hours";if(value==="LHAASO"){state.expected=false;if(state.sort==="t5")state.sort="month";}}
     state[k]=value;state.page=0;refresh();
     try {
       if(k==="catalog"&&value==="4FGL-DR4"&&WBCatalog.selected.size&&!WBCatalog.cache.fermi) await WBCatalog.load("fermi");
@@ -7375,7 +7838,9 @@ const WBWindows = (() => {
   };
   App.acts.wiResetPreview=()=>{state.preview=null;clearYear();clearMonth();clearNight();refresh();};
   return {render,mount,focusSource,zenithPanel,parseCoord,sheet,mountSheet,pagePart,get ready(){return state.ready;},
-    row:id=>rows().find(r=>r.id===id),get night(){return state.night;},get preview(){return state.preview;},get error(){return state.error;},get selected(){return state.selected;},
+    row:id=>rows().find(r=>r.id===id),
+    // 同一处各目录的行（和表里同一套合并规则），给手排的 5σ 估计用
+    members:id=>{const s=rows().find(r=>r.id===id); return s ? (sheetCtx(s).group?.members || [s]) : null;},get night(){return state.night;},get preview(){return state.preview;},get error(){return state.error;},get selected(){return state.selected;},
     // 天图上“LACT 可观测天区”跟这一页的临时预览值走
     previewZenith:()=>U.fin(state.preview?.zenith) ? state.preview.zenith : null};
 })();
@@ -7409,6 +7874,30 @@ const WBManual = (() => {
   // 转向时间：两源角距 ÷ 转速 + 稳定时间（登记表），单位分钟
   const slew = (a, b) => (Astro.sep(a.ra_deg, a.dec_deg, b.ra_deg, b.dec_deg) / (WBPolicy.get("slew_speed") || 1) + (WBPolicy.get("slew_settle") || 0)) / 60;
   const visibleMin = (g, a, b) => (g?.windows || []).reduce((sum, w) => sum + Math.max(0, Math.min(b, U.ms(w.end_utc)) - Math.max(a, U.ms(w.start_utc))), 0) / MIN;
+
+  /* 打到几 σ（WBDetect 的简单估计，灵敏度占位）：块里每个取样点看得到就按那一刻的天顶角累计 */
+  function detect(date, b) {
+    if (typeof WBDetect === "undefined") return null;
+    const g = geo(date, b.src), members = WBWindows.members?.(b.src.id);
+    if (!g?.zenith?.length || !members) return null;
+    const step = (WBPolicy.display()?.window_step_min || 1) * MIN, wins = (g.windows || []).map(w => [U.ms(w.start_utc), U.ms(w.end_utc)]);
+    const samples = [];
+    g.zenith.forEach((z, i) => {
+      const t = g.start_ms + i * step;
+      if (t >= b.start && t < b.end && wins.some(([x, y]) => t >= x && t < y)) samples.push({z, hours: step / 36e5});
+    });
+    return WBDetect.accumulate(members, samples);
+  }
+  function detectTotals(date) {
+    const by = new Map();
+    for (const b of list(date)) {
+      const d = detect(date, b); if (!d) continue;
+      const x = by.get(b.src.id) || {name: b.src.name, s2: 0, ns: 0, upper: false, extrap: false, n: 0};
+      x.s2 += d.s2; x.ns += d.ns; x.upper ||= d.upper; x.extrap ||= d.extrap; x.n++;
+      by.set(b.src.id, x);
+    }
+    return [...by.values()];
+  }
 
   function check(date) {
     const blocks = list(date), out = new Map();
@@ -7499,12 +7988,22 @@ const WBManual = (() => {
 
   function table(date) {
     const blocks = list(date), status = check(date);
-    return `<div class="scroll-x"><table class="t mp-table"><thead><tr><th>#</th><th>源</th><th>北京时间</th><th class="num">分钟</th><th>检查</th><th></th></tr></thead><tbody>
+    return `<div class="scroll-x"><table class="t mp-table"><thead><tr><th>#</th><th>源</th><th>北京时间</th><th class="num">分钟</th><th class="num" title="这一段估计打到几 σ（整阵，灵敏度为占位）；* 表示超出事例不足 10 个">σ（估）</th><th>检查</th><th></th></tr></thead><tbody>
       ${blocks.map((b, i) => { const msgs = status.get(b.id) || [];
         return `<tr class="click${b.id === sel ? " sel" : ""}" data-act="mpSel" data-arg="${b.id}"><td class="num">${i + 1}</td><td><i class="mp-dot" style="background:${color(date, b.src.id)}"></i>${U.esc(b.src.name)}</td>
         <td class="num">${hm(b.start)}—${hm(b.end)}</td><td class="num">${Math.round((b.end - b.start) / MIN)}</td>
+        <td class="num">${typeof WBDetect !== "undefined" ? WBDetect.sigmaText(detect(date, b)) : "—"}</td>
         <td>${msgs.length ? `<span class="danger">${U.esc(msgs.join("；"))}</span>` : '<span class="ok">可以</span>'}</td>
         <td><button type="button" class="btn" data-act="mpDel" data-arg="${b.id}" aria-label="删掉第 ${i + 1} 段">删掉</button></td></tr>`; }).join("")}</tbody></table></div>`;
+  }
+
+  // 各源这一晚合计打到几 σ（同一源几段的显著性平方相加）
+  function sigmaLine(date) {
+    if (typeof WBDetect === "undefined") return "";
+    const rows = detectTotals(date);
+    if (!rows.some(x => x.n > 1)) return "";   // 每个源只有一段时，表里那一列就是合计
+    return `<p class="small mp-sigma">同一源几段合计：${rows.filter(x => x.n > 1).map(x => `${U.esc(x.name)} ${WBDetect.sigmaText(x)}`).join(" · ")}
+      <span class="muted" title="${U.esc(WBDetect.note() + "。整阵口径，按每个时刻的天顶角累计，σ 随 √t 增长。≥ 表示低能没有测量、只算了测到的高能段，≈ 表示流强从更高能量往下外推，* 表示超出事例不足 10 个")}">（灵敏度占位，仅供量级参考）</span></p>`;
   }
 
   function editor(date) {
@@ -7524,7 +8023,8 @@ const WBManual = (() => {
       ${blocks.length ? `<div class="mp-chart" data-mp-chart>${chart(date)}</div>
         <p class="note">拖色块改时间，拖右边缘改时长（每次 5 分钟）。斜纹是两源之间的转向时间，红边的段有问题。</p>
         ${editor(date)}${table(date)}
-        <p class="small">${blocks.length} 段，共 ${Math.round(total)} 分钟${bad ? ` · <span class="danger">${bad} 段要改</span>` : " · 全部通过检查"}</p>` :
+        <p class="small">${blocks.length} 段，共 ${Math.round(total)} 分钟${bad ? ` · <span class="danger">${bad} 段要改</span>` : " · 全部通过检查"}</p>
+        ${sigmaLine(date)}` :
         '<p class="note">在上面表里源名后点“排入”，这个源就放进这一晚能看到的第一个空档（默认 60 分钟）；之后拖动色块调时间。</p>'}
       <div class="mp-actions">
         ${blocks.length ? `<button type="button" class="btn" data-act="mpExport" data-arg="tasks">导出任务 CSV</button>
@@ -9287,6 +9787,136 @@ ReplayToo.alertName = (id, w) => {
   };
 })();
 
+
+/* ==== 56-stars.js ==== */
+"use strict";
+/* 源与窗口 → 某一晚：这一晚能看哪些亮星（恒星强度干涉用，2026-11-27，用户要求先简单做）。
+   只看几何：太阳高度、天顶角、离月；月亮在天上也可以观测（强度干涉不怕月光）。条件都是占位，改 COND 即可。
+   星表用台站天空同一份（V ≤ 8，Gaia DR3 + SIMBAD + JSDC），星等上限可选，记在本机。 */
+const WBStars = (() => {
+  const COND = {sun: -13, zenith: 60, moon: 15};       // 占位：太阳 < −13°，天顶角 ≤ 60°，月亮在地平线上时离月 ≥ 15°
+  const LIMITS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
+  const PAGE = 40;
+  // 常用中文名（只给最亮的一些）
+  const CN = {"alf CMa": "天狼星", "alf Car": "老人星", "alf Cen": "南门二", "alf Boo": "大角星", "alf Lyr": "织女星", "alf Aur": "五车二",
+    "bet Ori": "参宿七", "alf CMi": "南河三", "alf Eri": "水委一", "alf Ori": "参宿四", "bet Cen": "马腹一", "alf Aql": "牛郎星",
+    "alf Cru": "十字架二", "alf Tau": "毕宿五", "alf Vir": "角宿一", "alf Sco": "心宿二", "bet Gem": "北河三", "alf PsA": "北落师门",
+    "bet Cru": "十字架三", "alf Cyg": "天津四", "alf Leo": "轩辕十四", "eps CMa": "弧矢七", "alf Gem": "北河二", "gam Cru": "十字架一",
+    "lam Sco": "尾宿八", "gam Ori": "参宿五", "bet Tau": "五车五", "bet Car": "南船五", "eps Ori": "参宿二", "alf Gru": "鹤一",
+    "zet Ori": "参宿一", "eps UMa": "玉衡", "alf Per": "天船三", "alf UMa": "天枢", "del CMa": "弧矢一", "eps Sgr": "箕宿三",
+    "eta UMa": "摇光", "alf UMi": "北极星", "alf And": "壁宿二", "alf Oph": "候", "bet Leo": "五帝座一", "gam Cyg": "天津一",
+    "alf Peg": "室宿一", "bet Per": "大陵五", "alf Ari": "娄宿三", "alf Hya": "星宿一", "zet UMa": "开阳", "bet UMa": "天璇",
+    "gam UMa": "天玑", "alf Cas": "王良四", "gam Cas": "策", "bet And": "奎宿九"};
+  // 默认收起（用户 11-27 定）；展开状态只在这次打开页面里保留
+  const state = {open: false, vmax: U.store.get("sii-vmax", 1), sort: U.store.get("sii-sort", "start"), invisible: false, page: 1,
+    key: null, rows: [], total: 0, waiting: false, error: null};
+  const bayer = s => (String(s.name || "").replace(/^\*+\s*/, "").match(/^([a-z]+\.?)\d{0,2} ([A-Z][a-zA-Z]{2})\b/) || []).slice(1).join(" ");
+  const label = s => {
+    const name = typeof WBAtlas !== "undefined" ? WBAtlas.starName(s) : String(s.name || "").replace(/^\*+\s*/, ""), cn = CN[bayer(s)];
+    return cn ? `${name} · ${cn}` : name;
+  };
+  const deg = v => String(v).replace("-", "−") + "°";
+  const preview = () => ({sun: COND.sun, zenith: COND.zenith, moon: COND.moon, moonMode: "up"});
+
+  // 月亮：这一晚（北京时间 18:00—次日 08:00）里的升落和照明
+  function moon(date) {
+    try {
+      const s = WBPolicy.get("site"), [a, b] = WBPolicy.bounds(date), days = (b - a) / 864e5;
+      const obs = new Astronomy.Observer(s.lat_deg, s.lon_deg, s.height_m);
+      const find = dir => { const t = Astronomy.SearchRiseSet("Moon", obs, dir, new Date(a), days); return t ? +t.date : null; };
+      const rise = find(+1), set = find(-1);
+      const alt = Astronomy.Horizon(Astronomy.MakeTime(new Date(a)), obs, ...(x => [x.ra, x.dec])(Astronomy.Equator("Moon", Astronomy.MakeTime(new Date(a)), obs, true, true)), "").altitude;
+      const illum = Astronomy.Illumination("Moon", new Date((a + b) / 2)).phase_fraction;
+      const parts = [];
+      if (rise != null) parts.push("月升 " + U.hm(new Date(rise).toISOString()));
+      if (set != null) parts.push("月落 " + U.hm(new Date(set).toISOString()));
+      if (rise == null && set == null) parts.push(alt > 0 ? "月亮整夜在天上" : "月亮整夜在地平线下");
+      return parts.join("，") + "，照明 " + Math.round(illum * 100) + "%";
+    } catch (e) { return ""; }
+  }
+
+  function compute(date) {
+    const all = WBAtlas.starRows() || [], key = date + "|" + state.vmax + "|" + JSON.stringify(COND);
+    if (state.key === key) return;
+    const list = all.filter(s => U.fin(s.mag) && s.mag <= state.vmax);
+    const rows = list.length ? WBGeo.night(date, list, preview(), false) : [];
+    const byId = new Map(list.map(s => [s.id, s]));
+    state.rows = rows.map(r => ({...r, star: byId.get(r.id)})).filter(r => r.star);
+    state.total = list.length; state.key = key; state.page = 1;
+  }
+
+  function axis(date) {
+    const [a, b] = WBPolicy.bounds(date), ticks = [];
+    const first = Math.ceil(a / 72e5) * 72e5;                 // 每两小时一个刻度
+    for (let t = first; t <= b; t += 72e5) ticks.push(`<span style="left:${(100 * (t - a) / (b - a)).toFixed(2)}%">${U.hm(new Date(t).toISOString()).slice(0, 2)}</span>`);
+    return `<span class="sii-axis" aria-hidden="true">${ticks.join("")}</span>`;
+  }
+  function track(r) {
+    const [a, b] = WBPolicy.bounds(r.night_local_date), pct = v => { const t = U.ms(v); return t == null ? null : U.clamp(100 * (t - a) / (b - a), 0, 100); };
+    const bars = (r.windows || []).map(w => { const x = pct(w.start_utc), y = pct(w.end_utc);
+      return x == null || y == null || y <= x ? "" : `<i style="left:${x.toFixed(2)}%;width:${(y - x).toFixed(2)}%"></i>`; }).join("");
+    const best = pct(r.best_utc);
+    return `<span class="win-track" aria-hidden="true">${bars}${best == null ? "" : `<b style="left:${best.toFixed(2)}%"></b>`}</span>`;
+  }
+  const dur = m => m >= 60 ? `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, "0")}` : `${Math.round(m)} 分`;
+
+  function card(date) {
+    if (typeof WBAtlas === "undefined" || typeof WBGeo === "undefined" || !WBPolicy.display()) return "";
+    // 收起时：星表已经读进来（台站天空会读）就顺手写一句今晚能看几颗，不为这个去读星表
+    let teaser = "";
+    if (!state.open && WBAtlas.starRows()) { compute(date); teaser = ` · V ≤ ${state.vmax} 能看 ${state.rows.filter(r => r.geometry_min > 0).length} 颗`; }
+    else if (!state.open && WBAtlas.starsLoading() && !state.waiting) {
+      state.waiting = true;
+      WBAtlas.loadStars().then(() => { state.waiting = false; App.render("windowStars"); }).catch(() => { state.waiting = false; });
+    }
+    const head = `<div class="card-h sii-head"><h2>这一晚能看哪些亮星</h2><span class="note">恒星强度干涉用${teaser}</span><span class="win-grow"></span>
+      <button type="button" class="win-more" data-act="siiOpen" aria-expanded="${state.open}">${state.open ? "收起 ▴" : "展开 ▾"}</button></div>`;
+    if (!state.open) return head;
+    const controls = `<p class="note">只看几何（太阳、天顶角、离月），月光下也算能看。</p><div class="win-controls">
+        <label>星等<select data-change="siiLimit">${LIMITS.map(v => `<option value="${v}"${v === state.vmax ? " selected" : ""}>V ≤ ${v}</option>`).join("")}</select></label>
+        <label>排序<select data-change="siiSort">${[["start", "开始早"], ["mag", "最亮"], ["duration", "可见时间长"], ["zenith", "天顶角小"]]
+          .map(([k, l]) => `<option value="${k}"${k === state.sort ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+        <label class="win-check"><input type="checkbox" data-change="siiInvisible"${state.invisible ? " checked" : ""}>也列出看不到的</label></div>`;
+    if (!WBAtlas.starRows()) {
+      if (!state.waiting) {
+        state.waiting = true;
+        WBAtlas.loadStars().then(() => { state.waiting = false; App.render("windowStars"); })
+          .catch(e => { state.waiting = false; state.error = e?.message || String(e); App.render("windowStars"); });
+      }
+      return head + controls + `<p class="note" role="status">${state.error ? `<span class="danger">亮星表读不到：${U.esc(state.error)}</span>` : "正在读亮星表…"}</p>`;
+    }
+    compute(date);
+    const ev = WBGeo.solarEvents(date), m = moon(date);
+    const value = r => state.sort === "mag" ? r.star.mag : state.sort === "duration" ? -r.geometry_min :
+      state.sort === "zenith" ? (r.best_zenith_deg ?? Infinity) : (U.ms(r.start_utc) ?? Infinity);
+    const seen = state.rows.filter(r => r.geometry_min > 0);
+    const shown = (state.invisible ? state.rows : seen).slice().sort((a, b) => value(a) - value(b) || a.star.mag - b.star.mag);
+    const page = shown.slice(0, PAGE * state.page);
+    const span = WBPolicy.bounds(date).map(t => U.hm(new Date(t).toISOString()));
+    const info = [ev.darkStart && ev.darkEnd ? `天黑 ${U.hm(ev.darkStart)}—${U.hm(ev.darkEnd)}（太阳低于 ${deg(COND.sun)}）` : "这一晚没有太阳低于 " + deg(COND.sun) + " 的时段", m,
+      `条件（占位）：天顶角 ≤ ${COND.zenith}°，月亮在地平线上时离月 ≥ ${COND.moon}°`].filter(Boolean).join(" · ");
+    return head + controls + `<p class="note">${U.esc(info)}</p>
+      ${shown.length ? `<div class="scroll-x win-table-wrap"><table class="win-table sii-table"><thead><tr><th>星</th><th class="num">V</th>
+        <th class="win-trackcell">可见时段 <span class="muted" style="font-weight:400">${span.join("—")}</span>${axis(date)}</th>
+        <th class="num">时长</th><th class="num" title="可见时段里天顶角最小（星最高）的时刻">最小天顶角</th><th class="num">最小离月</th></tr></thead><tbody>
+        ${page.map(r => `<tr${r.geometry_min > 0 ? "" : ' class="sii-off"'}>
+          <th scope="row">${U.esc(label(r.star))}</th><td class="num">${U.n(r.star.mag, 2)}</td>
+          <td class="win-trackcell">${track(r)}<span class="tiny muted num">${r.windows?.length ? U.esc(r.windows.map(w => U.span(w.start_utc, w.end_utc)).join("、")) : U.esc(r.blocking || "看不到")}</span></td>
+          <td class="num">${r.geometry_min > 0 ? dur(r.geometry_min) : "—"}</td>
+          <td class="num" title="可见时段里天顶角最小的时刻">${U.fin(r.best_zenith_deg) ? `${U.n(r.best_zenith_deg, 0)}° · ${U.hm(r.best_utc)}` : "—"}</td>
+          <td class="num">${U.fin(r.min_moon_sep_deg) ? U.n(r.min_moon_sep_deg, 0) + "°" : "—"}</td></tr>`).join("")}</tbody></table></div>` :
+        `<p class="note">V ≤ ${state.vmax} 的亮星这一晚都看不到。</p>`}
+      <div class="win-pagination"><span class="muted">全天 V ≤ ${state.vmax} 共 ${state.total} 颗，这一晚能看 ${seen.length} 颗 · 页面计算，1 分钟步长</span><span class="win-grow"></span>
+        ${page.length < shown.length ? `<button type="button" class="btn" data-act="siiMore">再显示 ${Math.min(PAGE, shown.length - page.length)} 颗</button>` : ""}</div>`;
+  }
+
+  App.acts.siiLimit = v => { state.vmax = +v; U.store.set("sii-vmax", state.vmax); App.render("windowStars"); };
+  App.acts.siiSort = v => { state.sort = v; U.store.set("sii-sort", v); state.page = 1; App.render("windowStars"); };
+  App.acts.siiInvisible = (v, el) => { state.invisible = !!el?.checked; state.page = 1; App.render("windowStars"); };
+  App.acts.siiMore = () => { state.page++; App.render("windowStars"); };
+  App.acts.siiOpen = () => { state.open = !state.open; App.render("windowStars"); };
+  return {card, COND};
+})();
 
 App.init();
 </script>
