@@ -852,6 +852,7 @@ input.hm{width:92px;padding:4px 6px;border:1px solid var(--border2);border-radiu
 .sii-table tr.sii-off th,.sii-table tr.sii-off td{color:var(--faint)}
 .mp-msg{margin:0 0 10px;padding:8px 12px;border-radius:8px;background:var(--sunk);font-size:13px}
 .mp-msg.is-bad{color:var(--danger)}
+.win-track em.sii-moon{position:absolute;inset-block:0;background:var(--moon);opacity:.28}
 
 </style>
 </head>
@@ -7958,7 +7959,20 @@ const WBManual = (() => {
     s += `<rect x="${x0}" y="14" width="${x1 - x0}" height="150" fill="var(--sunk)"/>`;
     if (Number.isFinite(ds)) s += `<rect x="${x0}" y="14" width="${Math.max(0, X(ds) - x0)}" height="150" fill="var(--twilight)" opacity=".55"/>`;
     if (Number.isFinite(de)) s += `<rect x="${X(de)}" y="14" width="${Math.max(0, x1 - X(de))}" height="150" fill="var(--twilight)" opacity=".55"/>`;
+    // 月亮在地平线上的时段铺一层很浅的底色（56-stars.js 算的月亮轨迹）
+    const mt = typeof WBStars !== "undefined" ? WBStars.moonTrack(date) : null;
+    for (const [u, v] of mt?.up || []) s += `<rect x="${X(u).toFixed(1)}" y="14" width="${Math.max(0, X(v) - X(u)).toFixed(1)}" height="150" fill="var(--moon)" opacity=".09"><title>月亮在地平线上 ${hm(u)}—${hm(v)}</title></rect>`;
     for (const z of [0, 30, 60, 90]) s += `<line x1="${x0}" x2="${x1}" y1="${Y(z)}" y2="${Y(z)}" stroke="var(--rule)"/><text x="${x0 - 6}" y="${Y(z) + 4}" text-anchor="end" class="mp-ax">${z}°</text>`;
+    // 月亮的天顶角：只画在地平线上的部分，名字写在最高点
+    if (mt?.up?.length) {
+      let seg = [];
+      const flush = () => { if (seg.length > 1) s += `<polyline points="${seg.join(" ")}" fill="none" stroke="var(--moon)" stroke-width="1.6" stroke-linejoin="round"/>`; seg = []; };
+      for (const p of mt.pts) { if (p.alt >= 0) seg.push(`${X(p.t).toFixed(1)},${Y(90 - p.alt).toFixed(1)}`); else flush(); }
+      flush();
+      const top = mt.pts.reduce((m, p) => p.alt > m.alt ? p : m, mt.pts[0]), name = `月亮 ${Math.round(mt.illum * 100)}%`, half = textWidth(name) / 2;
+      const tx = Math.min(x1 - half - 2, Math.max(x0 + half + 2, X(top.t)));
+      s += `<text x="${tx.toFixed(1)}" y="${Math.max(24, Y(90 - top.alt) - 6).toFixed(1)}" text-anchor="middle" class="mp-name" fill="var(--moon)">${name}</text>`;
+    }
     if (U.fin(zmax)) s += `<line x1="${x0}" x2="${x1}" y1="${Y(zmax)}" y2="${Y(zmax)}" stroke="var(--axis)" stroke-dasharray="4 4"/><text x="${x1 - 4}" y="${Y(zmax) - 4}" text-anchor="end" class="mp-ax">天顶角上限 ${zmax}°</text>`;
     const zStar = blocks.some(x => isStar(x.src)) && typeof WBStars !== "undefined" ? WBStars.COND.zenith : null;
     if (U.fin(zStar) && zStar !== zmax) s += `<line x1="${x0}" x2="${x1}" y1="${Y(zStar)}" y2="${Y(zStar)}" stroke="var(--axis)" stroke-dasharray="1 3"/><text x="${x1 - 4}" y="${Y(zStar) - 4}" text-anchor="end" class="mp-ax">亮星上限 ${zStar}°</text>`;
@@ -8038,7 +8052,7 @@ const WBManual = (() => {
       <div class="card-h"><h2>手排这一晚 <span class="tag">演示</span></h2><span class="note">只检查暗夜、天顶角、离月、重叠、最短 ${minVisit()} 分钟和转向时间，不是排班程序的结果；草稿存在这个浏览器里。</span></div>
       ${msg ? `<p class="mp-msg${msg.bad ? " is-bad" : ""}" role="status">${U.esc(msg.text)}</p>` : ""}
       ${blocks.length ? `<div class="mp-chart" data-mp-chart>${chart(date)}</div>
-        <p class="note">拖色块改时间，拖右边缘改时长（每次 5 分钟）。斜纹是两源之间的转向时间，红边的段有问题。</p>
+        <p class="note">拖色块改时间，拖右边缘改时长（每次 5 分钟）。斜纹是两源之间的转向时间，红边的段有问题；灰蓝曲线和浅底是月亮（在地平线上的时段），两头深灰是暮光。</p>
         ${editor(date)}${table(date)}
         <p class="small">${blocks.length} 段，共 ${Math.round(total)} 分钟${bad ? ` · <span class="danger">${bad} 段要改</span>` : " · 全部通过检查"}</p>
         ${sigmaLine(date)}` :
@@ -9845,22 +9859,42 @@ const WBStars = (() => {
   const deg = v => String(v).replace("-", "−") + "°";
   const preview = () => ({sun: COND.sun, zenith: COND.zenith, moon: COND.moon, moonMode: "up"});
 
-  // 月亮：这一晚（北京时间 18:00—次日 08:00）里的升落和照明
-  function moon(date) {
+  /* 月亮：这一晚（北京时间 18:00—次日 08:00）每 5 分钟的高度、在地平线上的时段（高度 0° 处插值）和照明。
+     手排图（53-manual.js）也用它画月亮的天顶角曲线和底色。 */
+  const moonMemo = new Map();
+  function moonTrack(date) {
+    if (moonMemo.has(date)) return moonMemo.get(date);
+    let out = null;
     try {
-      const s = WBPolicy.get("site"), [a, b] = WBPolicy.bounds(date), days = (b - a) / 864e5;
-      const obs = new Astronomy.Observer(s.lat_deg, s.lon_deg, s.height_m);
-      const find = dir => { const t = Astronomy.SearchRiseSet("Moon", obs, dir, new Date(a), days); return t ? +t.date : null; };
-      const rise = find(+1), set = find(-1);
-      const alt = Astronomy.Horizon(Astronomy.MakeTime(new Date(a)), obs, ...(x => [x.ra, x.dec])(Astronomy.Equator("Moon", Astronomy.MakeTime(new Date(a)), obs, true, true)), "").altitude;
-      const illum = Astronomy.Illumination("Moon", new Date((a + b) / 2)).phase_fraction;
-      const parts = [];
-      if (rise != null) parts.push("月升 " + U.hm(new Date(rise).toISOString()));
-      if (set != null) parts.push("月落 " + U.hm(new Date(set).toISOString()));
-      if (rise == null && set == null) parts.push(alt > 0 ? "月亮整夜在天上" : "月亮整夜在地平线下");
-      return parts.join("，") + "，照明 " + Math.round(illum * 100) + "%";
-    } catch (e) { return ""; }
+      const site = WBPolicy.get("site"), [a, b] = WBPolicy.bounds(date), step = 5 * 60e3;
+      const obs = new Astronomy.Observer(site.lat_deg, site.lon_deg, site.height_m), pts = [];
+      for (let t = a; t <= b + 1; t += step) {
+        const T = Astronomy.MakeTime(new Date(t)), eq = Astronomy.Equator("Moon", T, obs, true, true);
+        pts.push({t, alt: Astronomy.Horizon(T, obs, eq.ra, eq.dec, "").altitude});
+      }
+      const cross = (p, q) => p.t + (0 - p.alt) / (q.alt - p.alt) * (q.t - p.t);
+      const up = [];
+      let start = pts[0].alt >= 0 ? a : null;
+      for (let i = 1; i < pts.length; i++) {
+        const p = pts[i - 1], q = pts[i];
+        if (p.alt < 0 && q.alt >= 0) start = cross(p, q);
+        if (p.alt >= 0 && q.alt < 0 && start != null) { up.push([start, cross(p, q)]); start = null; }
+      }
+      if (start != null) up.push([start, pts.at(-1).t]);
+      const illum = Astronomy.Illumination("Moon", new Date((a + b) / 2)).phase_fraction, parts = [];
+      for (const [u, v] of up) {
+        if (u > a + 1) parts.push("月升 " + U.hm(u));
+        if (v < pts.at(-1).t - 1) parts.push("月落 " + U.hm(v));
+      }
+      if (!up.length) parts.push("月亮整夜在地平线下");
+      else if (!parts.length) parts.push("月亮整夜在天上");
+      out = {pts, up, illum, text: parts.join("，") + "，照明 " + Math.round(illum * 100) + "%"};
+    } catch (e) { out = null; }
+    if (moonMemo.size > 60) moonMemo.clear();
+    moonMemo.set(date, out);
+    return out;
   }
+  const moon = date => moonTrack(date)?.text || "";
 
   function compute(date) {
     const all = WBAtlas.starRows() || [], key = date + "|" + state.vmax + "|" + JSON.stringify(COND);
@@ -9879,11 +9913,14 @@ const WBStars = (() => {
     return `<span class="sii-axis" aria-hidden="true">${ticks.join("")}</span>`;
   }
   function track(r) {
-    const [a, b] = WBPolicy.bounds(r.night_local_date), pct = v => { const t = U.ms(v); return t == null ? null : U.clamp(100 * (t - a) / (b - a), 0, 100); };
+    const [a, b] = WBPolicy.bounds(r.night_local_date), pct = v => { const t = typeof v === "number" ? v : U.ms(v); return t == null ? null : U.clamp(100 * (t - a) / (b - a), 0, 100); };
     const bars = (r.windows || []).map(w => { const x = pct(w.start_utc), y = pct(w.end_utc);
       return x == null || y == null || y <= x ? "" : `<i style="left:${x.toFixed(2)}%;width:${(y - x).toFixed(2)}%"></i>`; }).join("");
     const best = pct(r.best_utc);
-    return `<span class="win-track" aria-hidden="true">${bars}${best == null ? "" : `<b style="left:${best.toFixed(2)}%"></b>`}</span>`;
+    // 月亮在地平线上的时段：灰蓝底
+    const moonUp = (moonTrack(r.night_local_date)?.up || []).map(([u, v]) => { const x = pct(u), y = pct(v);
+      return x == null || y == null || y <= x ? "" : `<em class="sii-moon" style="left:${x.toFixed(2)}%;width:${(y - x).toFixed(2)}%"></em>`; }).join("");
+    return `<span class="win-track" aria-hidden="true">${moonUp}${bars}${best == null ? "" : `<b style="left:${best.toFixed(2)}%"></b>`}</span>`;
   }
   const dur = m => m >= 60 ? `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, "0")}` : `${Math.round(m)} 分`;
 
@@ -9922,7 +9959,7 @@ const WBStars = (() => {
     const span = WBPolicy.bounds(date).map(t => U.hm(new Date(t).toISOString()));
     const plan = typeof WBManual !== "undefined" && WBManual.enabled();   // 公开版才有手排
     const info = [ev.darkStart && ev.darkEnd ? `天黑 ${U.hm(ev.darkStart)}—${U.hm(ev.darkEnd)}（太阳低于 ${deg(COND.sun)}）` : "这一晚没有太阳低于 " + deg(COND.sun) + " 的时段", m,
-      `条件（占位）：天顶角 ≤ ${COND.zenith}°，月亮在地平线上时离月 ≥ ${COND.moon}°`].filter(Boolean).join(" · ");
+      `条件（占位）：天顶角 ≤ ${COND.zenith}°，月亮在地平线上时离月 ≥ ${COND.moon}°`, moonTrack(date)?.up?.length ? "时段条上灰蓝底是月亮在天上" : ""].filter(Boolean).join(" · ");
     return head + controls + `<p class="note">${U.esc(info)}</p>
       ${shown.length ? `<div class="scroll-x win-table-wrap"><table class="win-table sii-table"><thead><tr><th>星</th><th class="num">V</th>
         <th class="win-trackcell">可见时段 <span class="muted" style="font-weight:400">${span.join("—")}</span>${axis(date)}</th>
@@ -9949,7 +9986,7 @@ const WBStars = (() => {
     const s = (WBAtlas.starRows() || []).find(x => x.id === id);
     return s ? {id: s.id, name: label(s), ra_deg: s.ra_deg ?? s.ra, dec_deg: s.dec_deg ?? s.dec, kind: "star", mag: s.mag} : null;
   }
-  return {card, COND, preview, star};
+  return {card, COND, preview, star, moonTrack};
 })();
 
 App.init();
