@@ -7911,7 +7911,7 @@ const WBManual = (() => {
   const fit = (text, px) => { let w = 0, out = ""; for (const ch of String(text)) { w += ch.charCodeAt(0) > 255 ? 11 : 6.5; if (w > px) return out.replace(/\s+$/, "") + "…"; out += ch; } return out; };
   // 颜色按源加进来的先后定，拖动改顺序时不变
   const color = (date, id) => PALETTE[[...new Set((plans[date] || []).map(b => b.src.id))].indexOf(id) % PALETTE.length] || PALETTE[0];
-  // 亮星（56-stars.js 排进来的，src.kind = "star"）按亮星的条件算可见：月光下也行、天顶角和离月另有占位值
+  // 亮星（56-stars.js 排进来的，src.kind = "star"）按亮星的条件算可见：月光下也行，天顶角上限 80°，离月另有占位值
   const isStar = src => src?.kind === "star";
   const conditions = src => isStar(src) && typeof WBStars !== "undefined" ? WBStars.preview() : WBWindows.preview;
   function geo(date, src) {
@@ -9871,10 +9871,10 @@ ReplayToo.alertName = (id, w) => {
 /* ==== 56-stars.js ==== */
 "use strict";
 /* 源与窗口 → 某一晚：这一晚能看哪些亮星（恒星强度干涉用，2026-11-27，用户要求先简单做）。
-   只看几何：太阳高度、天顶角、离月；月亮在天上也可以观测（强度干涉不怕月光）。条件都是占位，改 COND 即可。
+   只看几何：太阳高度、天顶角、离月；月亮在天上也可以观测（强度干涉不怕月光）。天顶角上限 80°（用户 11-28 定：光学恒星可到 80°），太阳和离月是占位；都在 COND 里改。
    星表用台站天空同一份（V ≤ 8，Gaia DR3 + SIMBAD + JSDC），星等上限可选，记在本机。 */
 const WBStars = (() => {
-  const COND = {sun: -13, zenith: 60, moon: 15};       // 占位：太阳 < −13°，天顶角 ≤ 60°，月亮在地平线上时离月 ≥ 15°
+  const COND = {sun: -13, zenith: 80, moon: 15};       // 天顶角 ≤ 80°（用户定）；太阳 < −13°、月亮在地平线上时离月 ≥ 15° 是占位
   const LIMITS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
   const PAGE = 40;
   // 常用中文名（只给最亮的一些）
@@ -9996,7 +9996,7 @@ const WBStars = (() => {
     const page = shown.slice(0, PAGE * state.page);
     const span = WBPolicy.bounds(date).map(t => U.hm(new Date(t).toISOString()));
     const plan = typeof WBManual !== "undefined" && WBManual.enabled();   // 公开版才有手排
-    const info = [`条件（占位）：太阳低于 ${deg(COND.sun)}，天顶角 ≤ ${COND.zenith}°，月亮在地平线上时离月 ≥ ${COND.moon}°`, moonTrack(date)?.up?.length ? "时段条上灰蓝底是月亮在天上" : ""].filter(Boolean).join(" · ");
+    const info = [`条件：天顶角 ≤ ${COND.zenith}°；太阳低于 ${deg(COND.sun)}、月亮在地平线上时离月 ≥ ${COND.moon}°（这两项是占位）`, moonTrack(date)?.up?.length ? "时段条上灰蓝底是月亮在天上" : ""].filter(Boolean).join(" · ");
     return head + controls + `<p class="note">${U.esc(info)}</p>
       ${shown.length ? `<div class="scroll-x win-table-wrap"><table class="win-table sii-table"><thead><tr><th>星</th><th class="num">V</th>
         <th class="win-trackcell">可见时段 <span class="muted" style="font-weight:400">${span.join("—")}</span>${axis(date)}</th>
