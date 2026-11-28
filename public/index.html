@@ -429,6 +429,42 @@ input.hm{width:92px;padding:4px 6px;border:1px solid var(--border2);border-radiu
 .about ul{margin:4px 0;padding-left:18px;line-height:1.7}
 .about p{margin:4px 0;line-height:1.7}
 
+/* 夜况条（57-nightsky.js）：太阳、月亮的升落，天色，月相 */
+.nsky{--moonlit:#EFE2B6;--sky-day:#F1E3BA;--sky-civil:#C9D1D8;--sky-naut:#7F8D9A;--sky-night:var(--night);display:grid;grid-template-columns:minmax(190px,auto) 1fr;gap:10px 24px;align-items:center;padding:12px 16px;border-radius:12px;background:var(--sunk);margin:0 0 16px}
+.nsky-moon{display:flex;align-items:center;gap:12px}
+.nsky-icon{flex:none;display:block}
+.nsky-icon .nsky-dark{fill:var(--twilight)}
+.nsky-icon .nsky-lit{fill:var(--moonlit)}
+.nsky-icon .nsky-rim{fill:none;stroke:var(--axis);stroke-width:1}
+.nsky-name{font-weight:600;font-size:15px;color:var(--ink)}
+.nsky-name .num{font-weight:500;color:var(--ink2)}
+.nsky-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.nsky-main{min-width:0}
+.nsky-bands{position:relative;padding-bottom:15px}
+.nsky-band{display:block;position:relative;border-radius:4px;overflow:hidden}
+.nsky-band.sky{height:10px;background:var(--sunk2)}
+.nsky-band.moon{height:5px;margin-top:3px}
+.nsky-band i{position:absolute;inset-block:0}
+.nsky-day{background:var(--sky-day)}
+.nsky-civil{background:var(--sky-civil)}
+.nsky-naut{background:var(--sky-naut)}
+.nsky-night{background:var(--sky-night)}
+.nsky-now{position:absolute;top:-3px;height:24px;width:2px;margin-left:-1px;background:var(--danger);border-radius:1px}
+.nsky-band.moon i{background:var(--moon);border-radius:3px}
+.nsky-ticks{position:absolute;left:0;right:0;bottom:0;height:12px;font-size:10.5px;line-height:12px;color:var(--muted)}
+.nsky-ticks span{position:absolute;transform:translateX(-50%)}
+.nsky-ticks span:first-child{transform:none}
+.nsky-evs{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:6px;font-size:12.5px;color:var(--ink2)}
+.nsky-ev b{color:var(--ink);font-weight:600}
+.nsky-k{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.nsky-k.sun{background:var(--sel)}
+.nsky-k.dark{background:var(--sky-night);box-shadow:0 0 0 1px var(--axis)}
+.nsky-k.moon{background:var(--moon)}
+.nsky-note{color:var(--muted)}
+@media (max-width:640px){.nsky{grid-template-columns:1fr;gap:10px}}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .nsky{--moonlit:#E9DDB4;--sky-day:#6E5F3A;--sky-civil:#4C5864;--sky-naut:#2E3A45;--sky-night:#0B1117}}
+:root[data-theme="dark"] .nsky{--moonlit:#E9DDB4;--sky-day:#6E5F3A;--sky-civil:#4C5864;--sky-naut:#2E3A45;--sky-night:#0B1117}
+
 /* Gamma atlas, station sky, and exposure overlays use the workbench tokens. */
 .wb-atlas-card{min-width:0}
 .wb-atlas-card .card-h,.wb-exposure-dialog .card-h,.wb-exposure-panel .card-h{flex-wrap:wrap}
@@ -3677,7 +3713,7 @@ App.screens.tonight = {
     return `
       <div class="head">
         <div class="t">
-          <div class="eyebrow">暗夜 ${m.dark.length ? U.span(m.dark[0], m.dark[1]) : "未提供"} · ${moonTxt} ${m.moonApprox || m.illumApprox ? approxTag() : ""}</div>
+          ${typeof WBNightSky !== "undefined" ? "" : `<div class="eyebrow">暗夜 ${m.dark.length ? U.span(m.dark[0], m.dark[1]) : "未提供"} · ${moonTxt} ${m.moonApprox || m.illumApprox ? approxTag() : ""}</div>`}
           <h1>${preview ? "当夜预览" : replay ? "排班回放" : "当夜计划"}</h1>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -3693,6 +3729,7 @@ App.screens.tonight = {
       ${App.flash ? `<div class="missing" style="margin-bottom:14px">${App.flash}</div>` : ""}
       ${preview ? TForecast.assumptions(T) : ""}
       ${ManualReplan.render(w,T,m)}
+      ${typeof WBNightSky !== "undefined" ? WBNightSky.strip(T.night_local_date, {dark: m.dark.length ? [m.dark[0], m.dark[1]] : null}) : ""}
       <div style="display:flex;flex-wrap:wrap;gap:8px 30px;margin:14px 2px 20px;font-size:13px;color:var(--ink2)">
         <span><b class="num" style="font-size:20px;color:var(--ink)">${U.n(TN.wall(visits))}</b> min ${replay?"计划观测":"有观测"}（墙钟并集）</span>
         <span><b class="num" style="font-size:20px;color:var(--ink)">${U.n(supMin)}</b> min 转向、等待与拆合阵</span>
@@ -4320,8 +4357,9 @@ const TForecast = {
       detail = `<div class="card" data-near-night="${U.esc(date)}"><p class="note">这是近期的条件分配。可执行访问与指向未提供。</p>
         <div class="scroll-x"><table class="t"><thead><tr><th>源</th><th class="n">需求 / 超额 · F32 当量 min</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
     } else detail = `<div class="card empty">${U.esc(date || "")} 这一夜没有保存的当夜计划。${Shell.nightChips("有计划的夜：")}</div>`;
+    // 没有当夜计划的夜也给夜况条（太阳、月亮、月相）
     return `<div class="head"><div class="t"><h1>${view.kind === "near_term" ? "近期分配" : "当夜计划"}</h1></div>${actions}</div>
-      ${detail}${TForecast.render(w,date)}`;
+      ${date && typeof WBNightSky !== "undefined" ? WBNightSky.strip(date) : ""}${detail}${TForecast.render(w,date)}`;
   },
   fillerGroup(w, unit, date, planId){
     const data = w?.fillerSuggestions;
@@ -7427,6 +7465,7 @@ const WBWindows = (() => {
       <label>目录<select data-change="wiControl" data-arg="catalog">${options(byCatalog,state.catalog)}</select></label>
       <label>排序<select data-change="wiControl" data-arg="nightSort">${options([["duration","可见时间长"],["start","开始早"],["zenith","最佳天顶角小"]],state.nightSort)}</select></label>
       <label class="win-check"><input type="checkbox" data-change="wiCheck" data-arg="invisible"${state.invisible?" checked":""}>也列出看不到的</label></div>
+      ${typeof WBNightSky!=="undefined"?WBNightSky.strip(state.night):""}
       <div data-part="windowNightList">${nightList()}</div>`;
   }
   function nightList(){
@@ -9950,7 +9989,6 @@ const WBStars = (() => {
       return head + controls + `<p class="note" role="status">${state.error ? `<span class="danger">亮星表读不到：${U.esc(state.error)}</span>` : "正在读亮星表…"}</p>`;
     }
     compute(date);
-    const ev = WBGeo.solarEvents(date), m = moon(date);
     const value = r => state.sort === "mag" ? r.star.mag : state.sort === "duration" ? -r.geometry_min :
       state.sort === "zenith" ? (r.best_zenith_deg ?? Infinity) : (U.ms(r.start_utc) ?? Infinity);
     const seen = state.rows.filter(r => r.geometry_min > 0);
@@ -9958,8 +9996,7 @@ const WBStars = (() => {
     const page = shown.slice(0, PAGE * state.page);
     const span = WBPolicy.bounds(date).map(t => U.hm(new Date(t).toISOString()));
     const plan = typeof WBManual !== "undefined" && WBManual.enabled();   // 公开版才有手排
-    const info = [ev.darkStart && ev.darkEnd ? `天黑 ${U.hm(ev.darkStart)}—${U.hm(ev.darkEnd)}（太阳低于 ${deg(COND.sun)}）` : "这一晚没有太阳低于 " + deg(COND.sun) + " 的时段", m,
-      `条件（占位）：天顶角 ≤ ${COND.zenith}°，月亮在地平线上时离月 ≥ ${COND.moon}°`, moonTrack(date)?.up?.length ? "时段条上灰蓝底是月亮在天上" : ""].filter(Boolean).join(" · ");
+    const info = [`条件（占位）：太阳低于 ${deg(COND.sun)}，天顶角 ≤ ${COND.zenith}°，月亮在地平线上时离月 ≥ ${COND.moon}°`, moonTrack(date)?.up?.length ? "时段条上灰蓝底是月亮在天上" : ""].filter(Boolean).join(" · ");
     return head + controls + `<p class="note">${U.esc(info)}</p>
       ${shown.length ? `<div class="scroll-x win-table-wrap"><table class="win-table sii-table"><thead><tr><th>星</th><th class="num">V</th>
         <th class="win-trackcell">可见时段 <span class="muted" style="font-weight:400">${span.join("—")}</span>${axis(date)}</th>
@@ -9987,6 +10024,116 @@ const WBStars = (() => {
     return s ? {id: s.id, name: label(s), ra_deg: s.ra_deg ?? s.ra, dec_deg: s.dec_deg ?? s.dec, kind: "star", mag: s.mag} : null;
   }
   return {card, COND, preview, star, moonTrack};
+})();
+
+/* ==== 57-nightsky.js ==== */
+"use strict";
+/* 夜况条（2026-11-28）：这一晚（北京时间 18:00—次日 08:00）太阳、月亮的升落，天色，月相。
+   当夜页头和“源与窗口 → 某一晚”共用。全部页面计算（Astronomy Engine）：
+   日出日落、月升月落按常用口径（上边缘、含大气折射）；“天黑 / 天亮”按登记表暗夜定义（太阳低于 dark_def.sun_max_deg，现为 −13°）。 */
+const WBNightSky = (() => {
+  const memo = new Map(), STEP = 5 * 60e3;
+  const DAY = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", "十一", "十二", "十三", "十四", "十五",
+    "十六", "十七", "十八", "十九", "二十", "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
+  const QUARTERS = [[0, "新月"], [90, "上弦"], [180, "满月"], [270, "下弦"]];
+
+  // 农历日期：用浏览器的中国历（Intl），不支持就不写
+  function lunar(t) {
+    try {
+      const f = new Intl.DateTimeFormat("zh-CN-u-ca-chinese", {month: "long", day: "numeric", timeZone: "Asia/Shanghai"});
+      const parts = f.formatToParts(new Date(t)), month = parts.find(p => p.type === "month")?.value, day = +parts.find(p => p.type === "day")?.value;
+      return month && day >= 1 && day <= 30 ? `农历${month}${DAY[day - 1]}` : "";
+    } catch (e) { return ""; }
+  }
+  // 月相名：按月日黄经差（0 新月、90 上弦、180 满月、270 下弦），前后各约半天算正点
+  function phaseName(phi) {
+    const near = (a, w = 6.4) => Math.abs(((phi - a + 540) % 360) - 180) <= w;
+    if (near(0)) return "新月"; if (near(90)) return "上弦月"; if (near(180)) return "满月"; if (near(270)) return "下弦月";
+    return phi < 90 ? "蛾眉月" : phi < 180 ? "盈凸月" : phi < 270 ? "亏凸月" : "残月";
+  }
+
+  function model(date) {
+    if (memo.has(date)) return memo.get(date);
+    let out = null;
+    try {
+      const site = WBPolicy.get("site"), [a, b] = WBPolicy.bounds(date), days = (b - a) / 864e5;
+      const darkAlt = WBPolicy.get("dark_def")?.sun_max_deg ?? -13;
+      const obs = new Astronomy.Observer(site.lat_deg, site.lon_deg, site.height_m);
+      const alt = (body, t) => { const T = Astronomy.MakeTime(new Date(t)), e = Astronomy.Equator(body, T, obs, true, true); return Astronomy.Horizon(T, obs, e.ra, e.dec, "").altitude; };
+      const pts = [];
+      for (let t = a; t <= b + 1; t += STEP) pts.push({t, sun: alt("Sun", t), moon: alt("Moon", t)});
+      const ms = x => x ? +x.date : null;
+      const ev = (body, dir) => ms(Astronomy.SearchRiseSet(body, obs, dir, new Date(a), days));
+      const sunAt = (dir, h) => ms(Astronomy.SearchAltitude("Sun", obs, dir, new Date(a), days, h));
+      const sunset = ev("Sun", -1), sunrise = ev("Sun", +1), moonrise = ev("Moon", +1), moonset = ev("Moon", -1);
+      const dusk = sunAt(-1, darkAlt), dawn = sunAt(+1, darkAlt);
+      // 月亮在地平线上的时段（按常用升落口径；整夜在上 / 在下也处理）
+      const up = [], startUp = pts[0].moon > -0.6;
+      const marks = [...(moonrise ? [[moonrise, "rise"]] : []), ...(moonset ? [[moonset, "set"]] : [])].sort((x, y) => x[0] - y[0]);
+      let from = startUp ? a : null;
+      for (const [t, k] of marks) { if (k === "rise") from = t; else { up.push([from ?? a, t]); from = null; } }
+      if (from != null) up.push([from, b]);
+      const mid = (a + b) / 2, illum = Astronomy.Illumination("Moon", new Date(mid)).phase_fraction, phi = Astronomy.MoonPhase(new Date(mid));
+      // 接下来的主要月相（30 天内，取最近两个）
+      const next = QUARTERS.map(([lon, name]) => ({name, t: ms(Astronomy.SearchMoonPhase(lon, new Date(b), 30))})).filter(x => x.t).sort((x, y) => x.t - y.t).slice(0, 2);
+      out = {a, b, pts, darkAlt, sunset, sunrise, dusk, dawn, moonrise, moonset, up, illum, phi, name: phaseName(phi), lunar: lunar(mid), next,
+        moonDarkMin: up.reduce((s, [u, v]) => s + Math.max(0, Math.min(v, dawn ?? b) - Math.max(u, dusk ?? a)), 0) / 6e4};
+    } catch (e) { out = null; }
+    if (memo.size > 60) memo.clear();
+    memo.set(date, out);
+    return out;
+  }
+
+  // 月相图：亮面在右是渐盈（北半球看），在左是渐亏
+  function icon(phi, size = 40) {
+    const r = size / 2 - 1.5, c = size / 2, k = (1 - Math.cos(phi * Math.PI / 180)) / 2, waxing = phi < 180;
+    const e = Math.abs(1 - 2 * k) * r, top = `${c} ${c - r}`, bot = `${c} ${c + r}`;
+    let lit = "";
+    if (k > 0.995) lit = `<circle cx="${c}" cy="${c}" r="${r}" class="nsky-lit"/>`;
+    else if (k > 0.005) {
+      const limb = waxing ? `M${top} A${r} ${r} 0 0 1 ${bot}` : `M${top} A${r} ${r} 0 0 0 ${bot}`;
+      const crescent = k < 0.5, sweep = waxing ? (crescent ? 0 : 1) : (crescent ? 1 : 0);
+      lit = `<path d="${limb} A${e.toFixed(2)} ${r} 0 0 ${sweep} ${top} Z" class="nsky-lit"/>`;
+    }
+    return `<svg class="nsky-icon" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle cx="${c}" cy="${c}" r="${r}" class="nsky-dark"/>${lit}<circle cx="${c}" cy="${c}" r="${r}" class="nsky-rim"/></svg>`;
+  }
+
+  const md = t => { const d = new Date(t + 8 * 3600e3); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
+  /* 夜况条。opts.dark = [开始, 结束]（毫秒）时用它代替页面算的天黑 / 天亮（当夜页用后端的暗夜） */
+  function strip(date, opts = {}) {
+    const m = model(date);
+    if (!m) return "";
+    const dusk = opts.dark?.[0] ?? m.dusk, dawn = opts.dark?.[1] ?? m.dawn;
+    const pct = t => U.clamp(100 * (t - m.a) / (m.b - m.a), 0, 100);
+    // 天色：白天 / 民用晨昏（−6° 以上）/ 航海晨昏到天黑 / 暗夜
+    const cls = s => s > -0.833 ? "day" : s > -6 ? "civil" : s > m.darkAlt ? "naut" : "night";
+    const runs = [];
+    for (const p of m.pts) { const k = cls(p.sun); if (runs.length && runs.at(-1).k === k) runs.at(-1).t1 = p.t + STEP; else runs.push({k, t0: p.t, t1: p.t + STEP}); }
+    const sky = runs.map(r => `<i class="nsky-${r.k}" style="left:${pct(r.t0).toFixed(2)}%;width:${(pct(Math.min(r.t1, m.b)) - pct(r.t0)).toFixed(2)}%"></i>`).join("");
+    const moonOp = (0.25 + 0.65 * m.illum).toFixed(2);
+    const moon = m.up.map(([u, v]) => `<i style="left:${pct(u).toFixed(2)}%;width:${(pct(v) - pct(u)).toFixed(2)}%;opacity:${moonOp}" title="月亮在地平线上 ${U.hm(u)}—${U.hm(v)}"></i>`).join("");
+    const ticks = []; for (let t = Math.ceil(m.a / 72e5) * 72e5; t <= m.b; t += 72e5) ticks.push(`<span style="left:${pct(t).toFixed(2)}%">${U.hm(t).slice(0, 2)}</span>`);
+    const evs = [[m.sunset, "日落", "sun"], [dusk, "天黑", "dark"], [m.moonrise, "月升", "moon"], [m.moonset, "月落", "moon"], [dawn, "天亮", "dark"], [m.sunrise, "日出", "sun"]]
+      .filter(([t]) => U.fin(t) && t >= m.a - 36e5 && t <= m.b + 36e5).sort((x, y) => x[0] - y[0]);
+    if (!m.moonrise && !m.moonset) evs.push([null, m.up.length ? "月亮整夜在天上" : "月亮整夜在地平线下", "moon"]);
+    const tip = {sun: "太阳上边缘过地平线（含大气折射）", dark: `太阳低于 ${String(m.darkAlt).replace("-", "−")}°（登记表的暗夜定义）`, moon: "月亮上边缘过地平线（含大气折射）"};
+    const chips = evs.map(([t, l, k]) => `<span class="nsky-ev" title="${U.esc(tip[k])}"><i class="nsky-k ${k}"></i>${l}${t ? ` <b class="num">${U.hm(t)}</b>` : ""}</span>`).join("");
+    // 这一晚正在进行时，画一条“现在”
+    const now = Date.now(), nowMark = now > m.a && now < m.b ? `<b class="nsky-now" style="left:${pct(now).toFixed(2)}%" title="现在 ${U.hm(now)}"></b>` : "";
+    const sub = [m.lunar, ...m.next.map(x => `${md(x.t)} ${x.name}`)].filter(Boolean).join(" · ");
+    const darkH = U.fin(dusk) && U.fin(dawn) ? (dawn - dusk) / 36e5 : null;
+    const moonNote = darkH != null ? (m.moonDarkMin > 1 ? `暗夜 ${U.n(darkH, 1)} h，其中 ${U.n(m.moonDarkMin / 60, 1)} h 有月亮` : `暗夜 ${U.n(darkH, 1)} h，没有月亮`) : "";
+    return `<div class="nsky" role="group" aria-label="这一晚的太阳和月亮">
+      <div class="nsky-moon">${icon(m.phi)}<div><div class="nsky-name">${m.name}<span class="num"> ${Math.round(m.illum * 100)}%</span></div>
+        <div class="nsky-sub">${U.esc(sub)}</div></div></div>
+      <div class="nsky-main">
+        <div class="nsky-bands" title="上：天色（白天、民用晨昏、航海晨昏到天黑、暗夜）；下：月亮在地平线上的时段，越亮越深">
+          <span class="nsky-band sky">${sky}</span><span class="nsky-band moon">${moon}</span>
+          <span class="nsky-ticks" aria-hidden="true">${ticks.join("")}</span>${nowMark}</div>
+        <div class="nsky-evs">${chips}${moonNote ? `<span class="nsky-note">${moonNote}</span>` : ""}</div>
+      </div></div>`;
+  }
+  return {model, strip, icon};
 })();
 
 App.init();
